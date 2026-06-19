@@ -1,0 +1,71 @@
+
+
+class SlabEntry {
+  int slabNo;
+  double length;
+  double width;
+  int quantity;
+
+  SlabEntry({
+    required this.slabNo,
+    this.length = 0.0,
+    this.width = 0.0,
+    this.quantity = 1,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'slabNo': slabNo,
+    'length': length,
+    'width': width,
+    'quantity': quantity,
+  };
+
+  factory SlabEntry.fromJson(Map<String, dynamic> json) => SlabEntry(
+    slabNo: json['slabNo'] ?? 1,
+    length: (json['length'] ?? 0.0).toDouble(),
+    width: (json['width'] ?? 0.0).toDouble(),
+    quantity: json['quantity'] ?? 1,
+  );
+
+  double getArea(String unit) {
+    double baseArea = length * width * quantity;
+    if (unit == 'Inches') {
+      return baseArea / 144.0; // Square Feet
+    } else if (unit == 'Cm') {
+      return baseArea / 10000.0; // Square Meters
+    }
+    return baseArea; // Feet -> Sq Ft, Meter -> Sq Meter
+  }
+}
+
+class SlabBook {
+  String id;
+  String name;
+  DateTime date;
+  String unit;
+  List<SlabEntry> slabs;
+
+  SlabBook({
+    required this.id,
+    required this.name,
+    required this.date,
+    required this.unit,
+    required this.slabs,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'date': date.toIso8601String(),
+    'unit': unit,
+    'slabs': slabs.map((e) => e.toJson()).toList(),
+  };
+
+  factory SlabBook.fromJson(Map<String, dynamic> json) => SlabBook(
+    id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    name: json['name'] ?? 'Untitled Book',
+    date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
+    unit: json['unit'] ?? 'Feet',
+    slabs: (json['slabs'] as List?)?.map((e) => SlabEntry.fromJson(e as Map<String, dynamic>)).toList() ?? [],
+  );
+}
