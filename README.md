@@ -1,70 +1,74 @@
 # Jamna Stone & Slab Calculator 🪨
 
-Welcome to the **Jamna Stone & Slab Calculator**! This is a professional-grade, cross-platform mobile application designed specifically for stone businesses, marble dealers, and granite traders to measure, calculate, and store slab and block measurements seamlessly.
+Welcome to the **Jamna Stone & Slab Calculator**! This is a highly optimized, cross-platform mobile application tailored for stone businesses, marble dealers, and granite traders. It enables seamless measurement, calculation, and secure storage of granite and marble slabs with an automated and intelligent workflow.
 
-## 📱 Features
+## 📱 Core Features
 
-1. **Slab Measurement Calculator** 📏
-   - Easily enter Length and Width for slabs.
-   - Automatically calculates total area in various units (Square Feet, Square Meters, Square Inches).
-   - Real-time Undo & Redo tracking for rapid data entry!
-   - Saves drafts so you never lose work on accident.
+1. **Intelligent Slab Measurement 📏**
+   - **Auto-Save & Live Persistence:** Measurements are saved instantly as you type. Never lose a single entry to app crashes or accidental closures.
+   - **Smart "Fill-Down" Logic:** Automatically populates height/width gaps between slab entries to speed up repetitive data entry, making large book creations a breeze!
+   - **Real-Time Area Calculation:** Instantly calculates total area in Square Feet, Square Meters, and Square Inches.
+   - **Undo & Redo System:** Quickly revert or restore actions during rapid data entry.
 
-2. **Block Calculator** 🧊
-   - Instantly calculate block volume and weight in tonnes based on Length, Width, Height, and standard density.
-   - Saves calculation history for easy reference.
+2. **Secure Records & History 🔒**
+   - **Local Storage Engine:** All books and measurements are securely stored right on your device for absolute privacy and offline accessibility.
+   - **PIN Protection:** Set a 4-Digit PIN to lock your application and protect sensitive business data.
+   - **Developer Recovery:** Built-in secure PIN reset functionality to prevent permanent lockouts (`9009`).
 
-3. **Secure Records & History** 🔒
-   - All measurements and books are securely stored locally on your device.
-   - Set a 4-Digit PIN to secure your data from unauthorized access.
-   - Complete Developer PIN reset functionality (`9009`).
+3. **Professional PDF Reporting 📄**
+   - Export your entire "Slab Book" into an ultra-high-quality, professional PDF document.
+   - Beautiful headers, meticulously aligned distinct grids, and optimally sized legible fonts suitable for CA/Accounting audits.
+   - Instantly share or print via WhatsApp, Email, or connected Bluetooth printers.
 
-4. **Professional PDF Reports** 📄
-   - Export your entire "Slab Book" into a high-quality PDF report.
-   - Beautiful headers, distinct grids, and large, legible font sizes.
-   - Print or share instantly via WhatsApp or Email.
-
-5. **Premium UI/UX** ✨
-   - Beautiful glass-morphism designs, vibrant gradients, and smooth flutter animations.
-   - Stunning Splash screen with logo animation.
+4. **Premium UI/UX ✨**
+   - **Aesthetic Excellence:** Beautiful glass-morphism designs, vibrant but professional gradients, and deeply polished aesthetics.
+   - **Fluid Animations:** Smooth Flutter animations, page transitions, and an elegant Splash screen with logo animation.
+   - **Responsive Table UI:** Upgraded data grids specifically optimized for maximum scannability and readability in bright outdoor environments (e.g., at the granite yard).
 
 ## 🛠️ Technology Stack
 
 - **Framework:** Flutter (Dart)
-- **Local Storage:** SharedPreferences & Custom Storage Service
-- **PDF Generation:** `pdf` & `printing` packages
+- **State & Data Management:** Core Flutter Stateful Widgets, Reactive state tracking, and Custom JSON-based Storage Engine.
+- **Reporting Engine:** `pdf` & `printing` packages
 - **Animations:** `flutter_animate`
-- **State Management:** Core Flutter Stateful Widgets & Reactive tracking
 
-## 🚀 How to Run Locally
+## 🚀 Getting Started
 
-1. Ensure you have [Flutter](https://flutter.dev/docs/get-started/install) installed.
-2. Clone this repository:
+### Prerequisites
+Make sure you have [Flutter](https://flutter.dev/docs/get-started/install) installed on your system.
+
+### Installation
+
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/PoojanPatel7/Jamna_stone_Calculator.git
    ```
-3. Navigate to the project directory:
+
+2. **Navigate to the project directory:**
    ```bash
    cd Jamna_stone_Calculator/slab_count
    ```
-4. Install dependencies:
+
+3. **Fetch dependencies:**
    ```bash
    flutter pub get
    ```
-5. Run the app:
+
+4. **Run the application:**
    ```bash
    flutter run
    ```
 
 ## 📦 Building the Production APK
 
-To generate a release-ready APK for Android devices:
+To generate a fully-optimized, future-proof release APK for Android devices:
 
 ```bash
 flutter build apk --release
 ```
-The compiled APK will be available in `build/app/outputs/flutter-apk/app-release.apk`.
+The compiled, ready-to-distribute APK will be located at:
+`build/app/outputs/flutter-apk/app-release.apk`
 
 ---
 
-*Designed and developed to make stone management elegant and easy!*
+*Designed and developed to make stone management elegant, accurate, and completely stress-free!*
