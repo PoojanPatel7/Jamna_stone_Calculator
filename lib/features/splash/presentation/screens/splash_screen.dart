@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../auth/presentation/screens/auth_screen.dart';
+import '../../../main/presentation/screens/main_screen.dart';
 
 
 class SplashScreen extends StatefulWidget {
@@ -18,7 +18,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const AuthScreen(),
+            pageBuilder: (_, __, ___) => const MainScreen(),
             transitionsBuilder: (_, animation, __, child) {
               return FadeTransition(opacity: animation, child: child);
             },
@@ -50,13 +50,11 @@ class _SplashScreenState extends State<SplashScreen> {
                   )
                 ],
               ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/logo.jpeg',
-                  width: 120,
-                  height: 120,
-                  fit: BoxFit.cover,
-                ),
+              child: Image.asset(
+                'assets/images/logo.jpeg',
+                width: 120,
+                height: 120,
+                fit: BoxFit.contain,
               ),
             ).animate()
               .scale(duration: 800.ms, curve: Curves.easeOutBack)

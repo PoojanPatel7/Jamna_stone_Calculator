@@ -10,7 +10,10 @@ import 'package:printing/printing.dart';
 import 'dart:typed_data';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final Function(SlabBook) onBookOpened;
+  final VoidCallback onNewBook;
+  
+  const HistoryScreen({super.key, required this.onBookOpened, required this.onNewBook});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -39,24 +42,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadHistory();
   }
 
-  Future<void> _renameBook(SlabBook book) {
-    final controller = TextEditingController(text: book.name);
+  Future<void> _editBookDetails(SlabBook book) {
+    final nameController = TextEditingController(text: book.name);
+    final plateController = TextEditingController(text: book.numberPlate ?? '');
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Rename Book'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: 'Enter new name'),
-            autofocus: true,
+          title: const Text('Edit Book Details'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Book Name'),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: plateController,
+                decoration: const InputDecoration(labelText: 'Number Plate (Optional)'),
+              ),
+            ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             TextButton(
               onPressed: () async {
-                if (controller.text.trim().isNotEmpty) {
-                  book.name = controller.text.trim();
+                if (nameController.text.trim().isNotEmpty) {
+                  book.name = nameController.text.trim();
+                  book.numberPlate = plateController.text.trim().isEmpty ? null : plateController.text.trim();
                   await StorageService.saveBook(book);
                   _loadHistory();
                 }
@@ -75,6 +90,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     
     final List<SlabEntry> expandedSlabs = [];
     for (var s in book.slabs) {
+      if (s.quantity <= 0 || s.length <= 0 || s.width <= 0) continue;
       for (int i = 0; i < s.quantity; i++) {
         expandedSlabs.add(SlabEntry(
           slabNo: s.slabNo + i,
@@ -100,7 +116,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(book.name, style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Unit: ${book.unit}', style: pw.TextStyle(fontSize: 18)),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Unit: ${book.unit}', style: pw.TextStyle(fontSize: 18)),
+                      if (book.numberPlate != null && book.numberPlate!.isNotEmpty)
+                        pw.Text('No. Plate: ${book.numberPlate}', style: pw.TextStyle(fontSize: 14)),
+                    ]
+                  )
                 ]
               ),
             ),
@@ -195,11 +218,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _openBook(SlabBook book) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SlabMeasurementScreen(loadedBook: book),
-      ),
-    ).then((_) => _loadHistory());
+    widget.onBookOpened(book);
   }
 
   @override
@@ -254,7 +273,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(book.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                Text(book.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              if (book.numberPlate != null && book.numberPlate!.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.grey),
+                                  ),
+                                  child: Text(
+                                    book.numberPlate!,
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 4),
                               Text(
                                 '${DateFormat('MMM dd, yyyy - hh:mm a').format(book.date)}',
@@ -271,8 +305,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.more_vert),
                           onSelected: (value) {
-                            if (value == 'rename') {
-                              _renameBook(book);
+                            if (value == 'edit') {
+                              _editBookDetails(book);
                             } else if (value == 'export') {
                               _openBook(book);
                             } else if (value == 'delete') {
@@ -280,7 +314,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             }
                           },
                           itemBuilder: (context) => [
-                            const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                            const PopupMenuItem(value: 'edit', child: Text('Edit Details')),
                             const PopupMenuItem(value: 'export', child: Text('Open & Export')),
                             const PopupMenuItem(
                               value: 'delete', 
@@ -294,6 +328,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 );
               },
             ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await StorageService.saveDraft([], 'inch');
+          widget.onNewBook();
+        },
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New Book', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.amber,
+        foregroundColor: Colors.black,
+      ),
     );
   }
 }

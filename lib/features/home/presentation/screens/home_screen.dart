@@ -1,197 +1,124 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-
+import '../../../slabs/services/storage_service.dart';
+import '../../../slabs/data/models/slab_models.dart';
 import '../../../slabs/presentation/screens/slab_measurement_screen.dart';
-import '../../../blocks/presentation/screens/block_calculator_screen.dart';
-import '../../../../main.dart'; // For themeNotifier
+import '../../../../main.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  final VoidCallback onStartMeasurement;
+  
+  const HomeScreen({super.key, required this.onStartMeasurement});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _totalBooks = 0;
+  double _totalAreaSaved = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final history = await StorageService.loadHistory();
+    double area = 0.0;
+    for (var book in history) {
+      for (var slab in book.slabs) {
+        area += slab.getArea(book.unit);
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _totalBooks = history.length;
+        _totalAreaSaved = area;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Jamna Stone', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Jamna Stone', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         actions: [
-          PopupMenuButton<ThemeMode>(
-            icon: const Icon(Icons.brightness_medium_rounded),
-            tooltip: 'Theme',
-            onSelected: (mode) {
-              themeNotifier.value = mode;
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+            onPressed: () {
+              themeNotifier.value = isDark ? ThemeMode.light : ThemeMode.dark;
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: ThemeMode.system, child: Text('System Default')),
-              const PopupMenuItem(value: ThemeMode.light, child: Text('Light Mode')),
-              const PopupMenuItem(value: ThemeMode.dark, child: Text('Dark Mode')),
-            ],
           ),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Select Calculator',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1, end: 0, duration: 400.ms),
-              const SizedBox(height: 8),
-              Text(
-                'Choose the measurement tool you need',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
-              ).animate().fadeIn(delay: 200.ms, duration: 400.ms).slideX(begin: -0.1, end: 0, delay: 200.ms, duration: 400.ms),
-              const SizedBox(height: 40),
-              
-              Expanded(
-                child: Hero(
-                  tag: 'block_calculator_card',
-                  child: _buildCalculatorCard(
-                    context,
-                    title: 'Block Calculator',
-                    subtitle: 'Calculate weight in tons using L × W × H',
-                    icon: Icons.view_in_ar_rounded,
-                    color: Colors.blueAccent,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) => const BlockCalculatorScreen(),
-                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                            return ScaleTransition(
-                              scale: Tween<double>(begin: 0.8, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                              child: FadeTransition(opacity: animation, child: child),
-                            );
-                          },
-                          transitionDuration: const Duration(milliseconds: 500),
-                        ),
-                      );
-                    },
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: AppColors.amberGradient,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.amber.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
                   ),
-                ).animate().fadeIn(delay: 400.ms, duration: 500.ms).slideY(begin: 0.1, end: 0, delay: 400.ms, duration: 500.ms),
+                ],
               ),
-              
-              const SizedBox(height: 24),
-              
-              Expanded(
-                child: Hero(
-                  tag: 'slab_calculator_card',
-                  child: _buildCalculatorCard(
-                    context,
-                    title: 'Slab Calculator',
-                    subtitle: 'Measure area, quantity, and manage slab books',
-                    icon: Icons.grid_on_rounded,
-                    color: Colors.amber,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) => const SlabMeasurementScreen(),
-                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                            return ScaleTransition(
-                              scale: Tween<double>(begin: 0.8, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                              child: FadeTransition(opacity: animation, child: child),
-                            );
-                          },
-                          transitionDuration: const Duration(milliseconds: 500),
-                        ),
-                      );
-                    },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('App Guide', style: TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '1. Tap "Start Measuring" to create a new book.\n'
+                    '2. Enter the Book Name and an optional Number Plate.\n'
+                    '3. Add Slabs: Enter the length, width, and quantity for each row.\n'
+                    '4. The app auto-increments the slab numbers for you.\n'
+                    '5. Switch between Card View and Table View for easy data entry.\n'
+                    '6. Use the History tab to manage, edit, or export saved books.\n'
+                    '7. Export data instantly as PDF or Images, or directly share them.',
+                    style: TextStyle(color: Colors.black87, fontSize: 16, height: 1.5),
                   ),
-                ).animate().fadeIn(delay: 600.ms, duration: 500.ms).slideY(begin: 0.1, end: 0, delay: 600.ms, duration: 500.ms),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: ElevatedButton(
+                      onPressed: widget.onStartMeasurement,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_box_rounded),
+                          SizedBox(width: 8),
+                          Text('Start Measuring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
-          ),
+            ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
+          ],
         ),
       ),
     );
-  }
-
-  Widget _buildCalculatorCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: isDark ? color.withOpacity(0.15) : color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isDark ? color.withOpacity(0.3) : color.withOpacity(0.5),
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDark ? color.withOpacity(0.2) : color.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 64, color: isDark ? color.lighten(0.2) : color),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? color.lighten(0.2) : color.darken(0.2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-extension ColorUtils on Color {
-  Color darken([double amount = .1]) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(this);
-    final hslDark = hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0));
-    return hslDark.toColor();
-  }
-
-  Color lighten([double amount = .1]) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(this);
-    final hslLight = hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0));
-    return hslLight.toColor();
   }
 }

@@ -25,7 +25,8 @@ class AppColors {
 
 class SlabMeasurementScreen extends StatefulWidget {
   final SlabBook? loadedBook;
-  const SlabMeasurementScreen({super.key, this.loadedBook});
+  final VoidCallback? onBackTapped;
+  const SlabMeasurementScreen({super.key, this.loadedBook, this.onBackTapped});
 
   @override
   State<SlabMeasurementScreen> createState() => _SlabMeasurementScreenState();
@@ -37,12 +38,15 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   String _currentUnit = 'Feet';
   String? _bookId;
   String _bookName = 'Untitled Book';
+  String _numberPlate = '';
   
   final List<String> _units = ['Feet', 'Inches', 'Cm', 'Meter'];
   
   List<String> _undoStack = [];
   List<String> _redoStack = [];
   String _formSessionId = UniqueKey().toString();
+  
+  bool _isTableView = true;
 
   @override
   void initState() {
@@ -54,40 +58,59 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     if (widget.loadedBook != null) {
       _bookId = widget.loadedBook!.id;
       _bookName = widget.loadedBook!.name;
+      _numberPlate = widget.loadedBook!.numberPlate ?? '';
       _currentUnit = widget.loadedBook!.unit;
-      _slabs = widget.loadedBook!.slabs.map((e) => SlabEntry(
-        slabNo: e.slabNo, length: e.length, width: e.width, quantity: e.quantity
-      )).toList();
-      _recalculateSlabNumbers();
-    } else {
-      final draft = await StorageService.loadDraft();
-      if (draft['slabs'].isNotEmpty) {
-        _slabs = draft['slabs'];
-        _currentUnit = draft['unit'];
-        _recalculateSlabNumbers();
-      } else {
-        _addNewSlab();
+      
+      List<SlabEntry> expanded = [];
+      for (var s in widget.loadedBook!.slabs) {
+        if (s.quantity > 1) {
+          for (int i = 0; i < s.quantity; i++) {
+            expanded.add(SlabEntry(slabNo: s.slabNo + i, length: s.length, width: s.width, quantity: 1));
+          }
+        } else {
+          expanded.add(SlabEntry(slabNo: s.slabNo, length: s.length, width: s.width, quantity: 1));
+        }
       }
+      _slabs = expanded;
+      
+      if (_slabs.length < 200) {
+        for (int i = _slabs.length; i < 200; i++) {
+          _slabs.add(SlabEntry(slabNo: i + 1));
+        }
+      }
+      _recalculateSlabNumbers();
     }
   }
 
-  void _saveDraft() {
-    // Always save to draft area — never silently overwrite saved history
-    StorageService.saveDraft(_slabs, _currentUnit);
+  void _saveBookLive() {
+    if (_bookId == null) return;
+    
+    final book = SlabBook(
+      id: _bookId!,
+      name: _bookName,
+      numberPlate: _numberPlate.trim().isEmpty ? null : _numberPlate.trim(),
+      date: DateTime.now(),
+      unit: _currentUnit,
+      slabs: _slabs,
+    );
+    StorageService.saveBook(book);
   }
 
   void _recalculateSlabNumbers() {
-    int currentNo = 1;
-    for (int i = 0; i < _slabs.length; i++) {
-      _slabs[i].slabNo = currentNo;
-      currentNo += _slabs[i].quantity;
+    if (_slabs.isNotEmpty) {
+      final last = _slabs.last;
+      _nextSlabNo = last.slabNo + last.quantity;
+    } else {
+      _nextSlabNo = 1;
     }
-    _nextSlabNo = currentNo;
     setState(() {});
   }
 
   void _saveStateForUndo() {
     _undoStack.add(jsonEncode(_slabs.map((e) => e.toJson()).toList()));
+    if (_undoStack.length > 50) {
+      _undoStack.removeAt(0);
+    }
     _redoStack.clear();
   }
 
@@ -99,7 +122,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       _formSessionId = UniqueKey().toString();
       _slabs = (jsonDecode(previousState) as List).map((e) => SlabEntry.fromJson(e)).toList();
       _recalculateSlabNumbers();
-      _saveDraft();
+      _saveBookLive();
     });
   }
 
@@ -111,62 +134,62 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       _formSessionId = UniqueKey().toString();
       _slabs = (jsonDecode(nextState) as List).map((e) => SlabEntry.fromJson(e)).toList();
       _recalculateSlabNumbers();
-      _saveDraft();
+      _saveBookLive();
     });
   }
 
   void _addNewSlab() {
     _saveStateForUndo();
     setState(() {
-      _slabs.add(SlabEntry(slabNo: _nextSlabNo));
+      _slabs.add(SlabEntry(slabNo: _slabs.length + 1));
       _recalculateSlabNumbers();
-      _saveDraft();
-    });
-  }
-  
-  void _duplicateSlab(int index) {
-    _saveStateForUndo();
-    setState(() {
-      final source = _slabs[index];
-      _slabs.insert(index + 1, SlabEntry(
-        slabNo: 0, 
-        length: source.length,
-        width: source.width,
-        quantity: source.quantity,
-      ));
-      _recalculateSlabNumbers();
-      _saveDraft();
+      _saveBookLive();
     });
   }
 
-  Future<void> _removeSlab(int index) async {
-    final slab = _slabs[index];
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Delete Slab?'),
-          content: Text('Are you sure you want to delete Slab #${slab.slabNo}?\nLength: ${slab.length}\nWidth: ${slab.width}\nQty: ${slab.quantity}'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true), 
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
+  void _checkAndAutoAddRows(int index, SlabEntry slab) {
+    if (index == _slabs.length - 1 && (slab.length > 0 || slab.width > 0)) {
+      for (int i = 0; i < 100; i++) {
+        _slabs.add(SlabEntry(slabNo: _slabs.length + 1));
       }
-    );
-    
-    if (confirm == true) {
-      _saveStateForUndo();
-      setState(() {
-        _slabs.removeAt(index);
-        _recalculateSlabNumbers();
-        _saveDraft();
-      });
     }
+  }
+  
+  void _copyPreviousRow(int index) {
+    if (index > 0) {
+      int lastFilledIndex = -1;
+      for (int i = index - 1; i >= 0; i--) {
+        if (_slabs[i].length > 0 || _slabs[i].width > 0) {
+          lastFilledIndex = i;
+          break;
+        }
+      }
+      
+      if (lastFilledIndex != -1) {
+        _saveStateForUndo();
+        setState(() {
+          _formSessionId = UniqueKey().toString();
+          double len = _slabs[lastFilledIndex].length;
+          double wid = _slabs[lastFilledIndex].width;
+          for (int i = lastFilledIndex + 1; i <= index; i++) {
+            _slabs[i].length = len;
+            _slabs[i].width = wid;
+          }
+          _checkAndAutoAddRows(index, _slabs[index]);
+          _saveBookLive();
+        });
+      }
+    }
+  }
+
+  void _clearRow(int index) {
+    _saveStateForUndo();
+    setState(() {
+      _formSessionId = UniqueKey().toString();
+      _slabs[index].length = 0.0;
+      _slabs[index].width = 0.0;
+      _saveBookLive();
+    });
   }
 
   double get _totalArea {
@@ -174,141 +197,117 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   }
   
   int get _totalQuantity {
-    return _slabs.fold<int>(0, (int sum, slab) => sum + slab.quantity);
+    return _slabs.where((s) => s.length > 0 || s.width > 0).length;
   }
   
-  Future<void> _saveBookAction() async {
-    // If editing an existing book, default name has "(New)" suffix
-    String defaultName = _bookName;
-    if (widget.loadedBook != null) {
-      // Always save as a new copy when editing an existing book
-      if (!defaultName.endsWith('(New)')) {
-        defaultName = '$defaultName (New)';
-      }
-    }
-    
-    final controller = TextEditingController(text: defaultName);
-    final resultName = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(widget.loadedBook != null ? 'Save as New Copy' : 'Save Slab Book'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.loadedBook != null)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Original record will be kept safe. This will save as a new copy.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+  Widget _buildCreateBookView() {
+    final nameController = TextEditingController();
+    final plateController = TextEditingController();
+    return Scaffold(
+      appBar: AppBar(title: const Text('New Measurement Book'), centerTitle: true),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Card(
+            elevation: 8,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Create New Book', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Book Name',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.book),
+                    ),
                   ),
-                ),
-              TextField(
-                controller: controller,
-                decoration: const InputDecoration(hintText: 'Enter book name'),
-                autofocus: true,
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: plateController,
+                    decoration: const InputDecoration(
+                      labelText: 'Number Plate (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.directions_car),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _currentUnit,
+                    decoration: const InputDecoration(
+                      labelText: 'Measurement Unit',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.straighten),
+                    ),
+                    items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _currentUnit = val;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                    ),
+                    onPressed: () {
+                      if (nameController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a book name')));
+                        return;
+                      }
+                      setState(() {
+                        _bookId = DateTime.now().millisecondsSinceEpoch.toString();
+                        _bookName = nameController.text.trim();
+                        _numberPlate = plateController.text.trim();
+                        _slabs = List.generate(200, (i) => SlabEntry(slabNo: i + 1));
+                        _recalculateSlabNumbers();
+                        _saveBookLive();
+                      });
+                    },
+                    child: const Text('Create & Start Measuring', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Save')),
-          ],
-        );
-      }
+        ),
+      ),
     );
-    
-    if (resultName != null && resultName.trim().isNotEmpty) {
-      _bookName = resultName.trim();
-      
-      if (widget.loadedBook != null) {
-        // Always create a NEW entry — never overwrite original
-        final newId = DateTime.now().millisecondsSinceEpoch.toString();
-        final book = SlabBook(
-          id: newId,
-          name: _bookName,
-          date: DateTime.now(),
-          unit: _currentUnit,
-          slabs: _slabs,
-        );
-        await StorageService.saveBook(book);
-        _bookId = newId;
-      } else {
-        // Brand new book (not editing)
-        final book = SlabBook(
-          id: _bookId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-          name: _bookName,
-          date: DateTime.now(),
-          unit: _currentUnit,
-          slabs: _slabs,
-        );
-        await StorageService.saveBook(book);
-        if (_bookId == null) {
-          await StorageService.clearDraft();
-          _bookId = book.id;
-        }
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Book saved successfully'), backgroundColor: Colors.green),
-        );
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvoked: (didPop) async {
-        if (didPop) return;
-        
-        if (_slabs.isEmpty || (_slabs.length == 1 && _slabs[0].length == 0 && _slabs[0].width == 0)) {
-          if (mounted) Navigator.of(context).pop();
-          return;
-        }
-        
-        final result = await showDialog<String>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Save Changes?'),
-              content: const Text('Do you want to save this slab book before leaving?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, 'discard'), 
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Discard')
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, 'cancel'), 
-                  child: const Text('Cancel')
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, 'save'), 
-                  child: const Text('Save')
-                ),
-              ],
-            );
-          }
-        );
-        
-        if (result == 'discard') {
-          if (mounted) Navigator.of(context).pop();
-        } else if (result == 'save') {
-          await _saveBookAction();
-          if (mounted) Navigator.of(context).pop();
-        }
-      },
-      child: Scaffold(
+    if (_bookId == null) {
+      return _buildCreateBookView();
+    }
+    
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(widget.loadedBook != null ? 'Edit: $_bookName' : 'Slab Measurement'),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Icon(_isTableView ? Icons.grid_view_rounded : Icons.table_chart_rounded),
+            tooltip: _isTableView ? 'Card View' : 'Table View',
+            onPressed: () {
+              setState(() {
+                _isTableView = !_isTableView;
+              });
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.undo_rounded),
             tooltip: 'Undo',
@@ -319,72 +318,60 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
             tooltip: 'Redo',
             onPressed: _redoStack.isNotEmpty ? _redo : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf_rounded),
-            tooltip: 'PDF Preview',
-            onPressed: _openPdfPreview,
-          ),
-          IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'History',
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HistoryScreen()));
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.save_rounded),
-            tooltip: 'Save Book',
-            onPressed: _saveBookAction,
-          ),
-          IconButton(
-            icon: const Icon(Icons.share_rounded),
-            tooltip: 'Export',
-            onPressed: _exportData,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Clear All',
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: const Text('Clear All Rows?'),
-                    content: const Text(
-                      'This will remove all measurement rows from the current screen. Saved books in History will NOT be affected.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text('Clear'),
-                      ),
-                    ],
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) async {
+              switch (value) {
+                case 'export': _exportData(); break;
+                case 'pdf': _openPdfPreview(); break;
+
+                case 'clear':
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text('Clear All Rows?'),
+                        content: const Text('This will remove all measurement rows from the current screen. Saved books in History will NOT be affected.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: TextButton.styleFrom(foregroundColor: Colors.red),
+                            child: const Text('Clear'),
+                          ),
+                        ],
+                      );
+                    },
                   );
-                },
-              );
-              if (confirm == true) {
-                _saveStateForUndo();
-                setState(() {
-                  _slabs.clear();
-                  _nextSlabNo = 1;
-                  _addNewSlab();
-                  _saveDraft();
-                });
+                  if (confirm == true) {
+                    _saveStateForUndo();
+                    setState(() {
+                      _slabs.clear();
+                      _nextSlabNo = 1;
+                      _recalculateSlabNumbers();
+                      _saveBookLive();
+                    });
+                  }
+                  break;
               }
             },
-          ),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'save', child: Row(children: [Icon(Icons.save_rounded, size: 20), SizedBox(width: 8), Text('Save Book')])),
+              const PopupMenuItem(value: 'export', child: Row(children: [Icon(Icons.share_rounded, size: 20), SizedBox(width: 8), Text('Export Data')])),
+              const PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_rounded, size: 20), SizedBox(width: 8), Text('PDF Preview')])),
+
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'clear', child: Row(children: [Icon(Icons.delete_sweep_rounded, color: Colors.red, size: 20), SizedBox(width: 8), Text('Clear All', style: TextStyle(color: Colors.red))])),
+              const PopupMenuItem(value: 'close', child: Row(children: [Icon(Icons.close_rounded, size: 20), SizedBox(width: 8), Text('Close Menu')])),
+            ],
+          )
         ],
       ),
       body: Column(
         children: [
           _buildTopSummary(),
           Expanded(
-            child: ListView.separated(
+            child: _isTableView ? _buildTableView() : ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 80), 
               itemCount: _slabs.length,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
@@ -395,26 +382,21 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addNewSlab,
-        backgroundColor: AppColors.amber,
-        foregroundColor: Colors.black,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add Row', style: TextStyle(fontWeight: FontWeight.bold)),
-      ).animate().scale(delay: 300.ms),
-    ));
+      floatingActionButton: null,
+    );
   }
 
   Widget _buildTopSummary() {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: isLandscape ? 4 : 12),
+      margin: EdgeInsets.fromLTRB(16, 8, 16, isLandscape ? 4 : 12),
       decoration: BoxDecoration(
         gradient: AppColors.amberGradient,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.amber.withOpacity(0.2),
+            color: AppColors.amber.withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -423,158 +405,216 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Unit: ', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Total Area', style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text('${_totalArea.toStringAsFixed(2)} $_currentUnit', style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.w900)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Slabs', style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text('$_totalQuantity', style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.w900)),
+                ],
+              ),
               Container(
-                height: 30,
+                height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.5), borderRadius: BorderRadius.circular(8)),
                 child: DropdownButton<String>(
                   value: _currentUnit,
                   dropdownColor: AppColors.amber,
                   underline: const SizedBox(),
-                  icon: const Icon(Icons.arrow_drop_down, color: Colors.black87),
-                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black87, size: 20),
+                  style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14),
                   items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                   onChanged: (val) {
                     if (val != null) {
-                      setState(() {
-                        _currentUnit = val;
-                        _saveDraft();
-                      });
+                      setState(() => _currentUnit = val);
+                      _saveBookLive();
                     }
                   },
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              Column(
-                children: [
-                  const Text('Total Slabs', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)),
-                  Text('$_totalQuantity', style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              Container(width: 1, height: 40, color: Colors.black26),
-              Column(
-                children: [
-                  Text('Total Area ($_currentUnit)', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)),
-                  Text(_totalArea.toStringAsFixed(2), style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
+  Widget _buildTableView() {
+    return Column(
+      children: [
+        Container(
+          color: AppColors.amber.withOpacity(0.2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: const Row(
+            children: [
+              Expanded(flex: 3, child: Text('Slab\nNo.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+              SizedBox(width: 4),
+              Expanded(flex: 4, child: Text('Length', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+              SizedBox(width: 4),
+              Expanded(flex: 4, child: Text('Width', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+              SizedBox(width: 4),
+              Expanded(flex: 4, child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            itemCount: _slabs.length,
+            separatorBuilder: (c, i) => Divider(height: 1, color: Theme.of(context).dividerColor.withOpacity(0.5)),
+            itemBuilder: (context, index) {
+              SlabEntry slab = _slabs[index];
+              return Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3, 
+                      child: Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 4,
+                      child: _NumberInputField(
+                        key: ValueKey('$_formSessionId-$index-length'),
+                        label: 'L',
+                        value: slab.length == 0 ? '' : slab.length.toString(),
+                        onChanged: (val) {
+                            _saveStateForUndo();
+                            slab.length = double.tryParse(val) ?? 0.0;
+                            _checkAndAutoAddRows(index, slab);
+                            _saveBookLive();
+                            if (mounted) setState((){});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 4,
+                      child: _NumberInputField(
+                        key: ValueKey('$_formSessionId-$index-width'),
+                        label: 'W',
+                        value: slab.width == 0 ? '' : slab.width.toString(),
+                        onChanged: (val) {
+                            _saveStateForUndo();
+                            slab.width = double.tryParse(val) ?? 0.0;
+                            _checkAndAutoAddRows(index, slab);
+                            _saveBookLive();
+                            if (mounted) setState((){});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 4,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Flexible(
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              iconSize: 22,
+                              tooltip: 'Copy from above row',
+                              icon: const Icon(Icons.arrow_downward_rounded, color: Colors.blueAccent),
+                              onPressed: index > 0 ? () => _copyPreviousRow(index) : null,
+                            ),
+                          ),
+                          Flexible(
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              iconSize: 22,
+                              tooltip: 'Clear row',
+                              icon: const Icon(Icons.clear_rounded, color: Colors.redAccent),
+                              onPressed: () => _clearRow(index),
+                            ),
+                          ),
+                        ],
+                      )
+                    ),
+                  ]
+                ),
+              );
+            }
+          )
+        )
+      ]
+    );
+  }
+
   Widget _buildSlabRow(int index) {
     final slab = _slabs[index];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.amber.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: AppColors.amber.withOpacity(0.3), width: 1.5),
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.amber.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  slab.quantity <= 1 ? 'Slab: ${slab.slabNo}' : 'Slab: ${slab.slabNo}-${slab.slabNo + slab.quantity - 1}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.amber),
-                ),
-              ),
+              Text('Slab ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.amber)),
               Row(
                 children: [
-                  Text('Area: ${slab.getArea(_currentUnit).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () => _duplicateSlab(index),
-                    borderRadius: BorderRadius.circular(20),
-                    child: const Padding(
-                      padding: EdgeInsets.all(4.0),
-                      child: Icon(Icons.copy_rounded, color: Colors.blueAccent, size: 20),
-                    ),
+                  IconButton(
+                    tooltip: 'Copy from above',
+                    icon: const Icon(Icons.arrow_downward_rounded, color: Colors.blueAccent),
+                    onPressed: index > 0 ? () => _copyPreviousRow(index) : null,
                   ),
-                  InkWell(
-                    onTap: () => _removeSlab(index),
-                    borderRadius: BorderRadius.circular(20),
-                    child: const Padding(
-                      padding: EdgeInsets.all(4.0),
-                      child: Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-                    ),
+                  IconButton(
+                    tooltip: 'Clear',
+                    icon: const Icon(Icons.clear_rounded, color: Colors.redAccent),
+                    onPressed: () => _clearRow(index),
                   ),
                 ],
-              ),
+              )
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: _buildNumberInput(
+                child: _NumberInputField(
                   key: ValueKey('$_formSessionId-$index-length'),
                   label: 'Length',
-                  initialValue: slab.length == 0 ? '' : slab.length.toString(),
+                  prefixIcon: Icons.straighten_rounded,
+                  iconColor: Colors.green,
+                  value: slab.length == 0 ? '' : slab.length.toString(),
                   onChanged: (val) {
                     _saveStateForUndo();
                     slab.length = double.tryParse(val) ?? 0.0;
-                    setState(() {});
-                    _saveDraft();
+                    _saveBookLive();
+                    if (mounted) setState(() {});
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
-                child: _buildNumberInput(
+                child: _NumberInputField(
                   key: ValueKey('$_formSessionId-$index-width'),
                   label: 'Width',
-                  initialValue: slab.width == 0 ? '' : slab.width.toString(),
+                  prefixIcon: Icons.height_rounded,
+                  iconColor: Colors.orange,
+                  value: slab.width == 0 ? '' : slab.width.toString(),
                   onChanged: (val) {
                     _saveStateForUndo();
                     slab.width = double.tryParse(val) ?? 0.0;
-                    setState(() {});
-                    _saveDraft();
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildNumberInput(
-                  key: ValueKey('$_formSessionId-$index-qty'),
-                  label: 'Qty',
-                  initialValue: slab.quantity.toString(),
-                  onChanged: (val) {
-                    _saveStateForUndo();
-                    slab.quantity = int.tryParse(val) ?? 1;
-                    _recalculateSlabNumbers();
-                    _saveDraft();
+                    _saveBookLive();
+                    if (mounted) setState(() {});
                   },
                 ),
               ),
@@ -582,38 +622,6 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNumberInput({Key? key, required String label, required String initialValue, required Function(String) onChanged}) {
-    return TextFormField(
-      key: key,
-      initialValue: initialValue,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontSize: 12),
-        alignLabelWithHint: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        isDense: true,
-        filled: true,
-        fillColor: Theme.of(context).scaffoldBackgroundColor,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.amber),
-        ),
-      ),
-      onChanged: onChanged,
     );
   }
 
@@ -649,6 +657,14 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                 onTap: () {
                   Navigator.pop(context);
                   _askForFileName(isPdf: false, action: 'save');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: const Text('Share Image(s) directly'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _askForFileName(isPdf: false, action: 'share');
                 },
               ),
             ],
@@ -701,7 +717,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           await _generateAndSavePdf(result);
         }
       } else {
-        await _generateAndSaveImages(result);
+        if (action == 'share') {
+          await _shareImages(result);
+        } else {
+          await _generateAndSaveImages(result);
+        }
       }
     }
   }
@@ -711,62 +731,104 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     
     final List<SlabEntry> expandedSlabs = [];
     for (var s in _slabs) {
-      for (int i = 0; i < s.quantity; i++) {
-        expandedSlabs.add(SlabEntry(
-          slabNo: s.slabNo + i,
-          length: s.length,
-          width: s.width,
-          quantity: 1,
-        ));
-      }
+      if (s.length <= 0 && s.width <= 0) continue;
+      expandedSlabs.add(s);
     }
     
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
-            pw.Header(
-              level: 0,
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(title, style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Unit: $_currentUnit', style: pw.TextStyle(fontSize: 18)),
-                ]
-              ),
+    if (expandedSlabs.isEmpty) {
+      pdf.addPage(pw.Page(
+        pageTheme: pw.PageTheme(
+          buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(color: PdfColors.white),
+          ),
+        ),
+        build: (context) => pw.Center(child: pw.Text('No Data'))
+      ));
+      return pdf;
+    }
+
+    for (int i = 0; i < expandedSlabs.length; i += 120) {
+      final chunk = expandedSlabs.sublist(i, i + 120 > expandedSlabs.length ? expandedSlabs.length : i + 120);
+      final leftChunk = chunk.sublist(0, chunk.length > 60 ? 60 : chunk.length);
+      final rightChunk = chunk.length > 60 ? chunk.sublist(60) : <SlabEntry>[];
+
+      pdf.addPage(
+        pw.Page(
+          pageTheme: pw.PageTheme(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(16),
+            buildBackground: (context) => pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Container(color: PdfColors.white),
             ),
-            pw.SizedBox(height: 10),
-            pw.TableHelper.fromTextArray(
-              context: context,
-              cellAlignment: pw.Alignment.center,
-              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
-              headerStyle: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-              cellStyle: const pw.TextStyle(fontSize: 16),
-              headers: ['No.', 'Length', 'Width', 'Area'],
-              data: expandedSlabs.map<List<String>>((s) {
-                return [
-                  '${s.slabNo}',
-                  s.length.toString(),
-                  s.width.toString(),
-                  '${s.getArea(_currentUnit).toStringAsFixed(2)} $_currentUnit'
-                ];
-              }).toList(),
-            ),
-            pw.SizedBox(height: 20),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          ),
+          build: (pw.Context context) {
+            return pw.Column(
               children: [
-                pw.Text('Total Slabs: $_totalQuantity', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Total Area: ${_totalArea.toStringAsFixed(2)} $_currentUnit', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Header(
+                  level: 0,
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(title, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                          if (_numberPlate.isNotEmpty)
+                            pw.Text('Plate: $_numberPlate', style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                        ]
+                      ),
+                      pw.Text('Unit: $_currentUnit', style: pw.TextStyle(fontSize: 14)),
+                    ]
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Expanded(
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(child: _buildPdfTable(context, leftChunk)),
+                      pw.SizedBox(width: 20),
+                      pw.Expanded(child: rightChunk.isNotEmpty ? _buildPdfTable(context, rightChunk) : pw.Container()),
+                    ]
+                  )
+                ),
+                pw.SizedBox(height: 10),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Total Slabs: $_totalQuantity', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Total Area: ${_totalArea.toStringAsFixed(2)} $_currentUnit', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                  ]
+                )
               ]
-            )
-          ];
-        }
-      )
-    );
+            );
+          }
+        )
+      );
+    }
     return pdf;
+  }
+
+  pw.Widget _buildPdfTable(pw.Context context, List<SlabEntry> data) {
+    return pw.TableHelper.fromTextArray(
+      context: context,
+      cellAlignment: pw.Alignment.center,
+      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+      headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+      cellStyle: const pw.TextStyle(fontSize: 8),
+      cellPadding: const pw.EdgeInsets.symmetric(vertical: 1, horizontal: 2),
+      headers: ['No.', 'L', 'W', 'Area'],
+      data: data.map<List<String>>((s) {
+        return [
+          '${s.slabNo}',
+          s.length.toString(),
+          s.width.toString(),
+          s.getArea(_currentUnit).toStringAsFixed(2)
+        ];
+      }).toList(),
+    );
   }
 
   Future<void> _sharePdf(String fileName) async {
@@ -824,5 +886,148 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
         );
       }
     }
+  }
+
+  Future<void> _shareImages(String fileName) async {
+    final pdf = _buildPdfDocument(fileName);
+    final bytes = await pdf.save();
+    
+    final dir = await getTemporaryDirectory();
+    int pageNumber = 1;
+    List<XFile> imageFiles = [];
+    
+    await for (final page in Printing.raster(bytes, dpi: 300)) {
+      final imageFile = File('${dir.path}/${fileName}_page_$pageNumber.png');
+      final pngBytes = await page.toPng();
+      await imageFile.writeAsBytes(pngBytes);
+      imageFiles.add(XFile(imageFile.path));
+      pageNumber++;
+    }
+    
+    if (imageFiles.isNotEmpty) {
+      await SharePlus.instance.share(ShareParams(files: imageFiles, text: 'Slab Measurement: $fileName'));
+    }
+  }
+}
+
+class _NumberInputField extends StatefulWidget {
+  final String label;
+  final String value;
+  final Function(String) onChanged;
+  final IconData? prefixIcon;
+  final Color? iconColor;
+  final bool showPlusMinus;
+
+  const _NumberInputField({
+    Key? key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.prefixIcon,
+    this.iconColor,
+    this.showPlusMinus = false,
+  }) : super(key: key);
+
+  @override
+  State<_NumberInputField> createState() => _NumberInputFieldState();
+}
+
+class _NumberInputFieldState extends State<_NumberInputField> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _increment() {
+    double val = double.tryParse(_controller.text) ?? 0;
+    _controller.text = (val + 1).toString().replaceAll(RegExp(r'\.0$'), '');
+    widget.onChanged(_controller.text);
+  }
+
+  void _decrement() {
+    double val = double.tryParse(_controller.text) ?? 0;
+    if (val > 0) {
+      _controller.text = (val - 1).toString().replaceAll(RegExp(r'\.0$'), '');
+      widget.onChanged(_controller.text);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inputField = TextFormField(
+      controller: _controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+      decoration: InputDecoration(
+        labelText: widget.label,
+        labelStyle: const TextStyle(fontSize: 12),
+        prefixIcon: widget.prefixIcon != null 
+          ? Icon(widget.prefixIcon, size: 18, color: widget.iconColor ?? Colors.grey)
+          : null,
+        alignLabelWithHint: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        isDense: true,
+        filled: true,
+        fillColor: Theme.of(context).scaffoldBackgroundColor,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: widget.iconColor ?? AppColors.amber, width: 2),
+        ),
+      ),
+      onChanged: widget.onChanged,
+    );
+
+    if (widget.showPlusMinus) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            InkWell(
+              onTap: _decrement,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.remove_rounded, size: 20, color: Colors.redAccent),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(child: inputField),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: _increment,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.add_rounded, size: 20, color: Colors.green),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return inputField;
   }
 }
