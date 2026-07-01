@@ -3,6 +3,7 @@ import '../../../home/presentation/screens/home_screen.dart';
 import '../../../slabs/presentation/screens/slab_measurement_screen.dart';
 import '../../../slabs/presentation/screens/history_screen.dart';
 import '../../../slabs/data/models/slab_models.dart';
+import '../../../../core/localization/app_translations.dart';
 
 class MainScreen extends StatefulWidget {
   final SlabBook? initialBook;
@@ -97,18 +98,18 @@ class _MainScreenState extends State<MainScreen> {
           showUnselectedLabels: true,
           type: BottomNavigationBarType.fixed,
           elevation: 0,
-          items: const [
+          items: [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Home',
+              icon: const Icon(Icons.home_rounded),
+              label: 'home'.tr,
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.calculate_rounded),
-              label: 'Measure',
+              icon: const Icon(Icons.calculate_rounded),
+              label: 'measure'.tr,
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.history_rounded),
-              label: 'History',
+              icon: const Icon(Icons.history_rounded),
+              label: 'history'.tr,
             ),
           ],
         ),

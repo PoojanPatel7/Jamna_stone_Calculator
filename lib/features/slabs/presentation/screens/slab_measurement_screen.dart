@@ -13,6 +13,7 @@ import '../../data/models/slab_models.dart';
 import '../../services/storage_service.dart';
 import 'history_screen.dart';
 import '../../../../main.dart'; // For themeNotifier
+import '../../../../core/localization/app_translations.dart';
 
 class AppColors {
   static const Color amber = Color(0xFFFFC107);
@@ -38,7 +39,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   String _currentUnit = 'Feet';
   String? _bookId;
   String _bookName = 'Untitled Book';
+  String _graniteName = '';
+  String _partyName = '';
   String _numberPlate = '';
+  DateTime _bookDate = DateTime.now();
   
   final List<String> _units = ['Feet', 'Inches', 'Cm', 'Meter'];
   
@@ -58,7 +62,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     if (widget.loadedBook != null) {
       _bookId = widget.loadedBook!.id;
       _bookName = widget.loadedBook!.name;
+      _graniteName = widget.loadedBook!.graniteName ?? '';
+      _partyName = widget.loadedBook!.partyName ?? '';
       _numberPlate = widget.loadedBook!.numberPlate ?? '';
+      _bookDate = widget.loadedBook!.date;
       _currentUnit = widget.loadedBook!.unit;
       
       List<SlabEntry> expanded = [];
@@ -88,8 +95,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     final book = SlabBook(
       id: _bookId!,
       name: _bookName,
+      graniteName: _graniteName.trim().isEmpty ? null : _graniteName.trim(),
+      partyName: _partyName.trim().isEmpty ? null : _partyName.trim(),
       numberPlate: _numberPlate.trim().isEmpty ? null : _numberPlate.trim(),
-      date: DateTime.now(),
+      date: _bookDate,
       unit: _currentUnit,
       slabs: _slabs,
     );
@@ -201,89 +210,127 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   }
   
   Widget _buildCreateBookView() {
-    final nameController = TextEditingController();
+    final graniteController = TextEditingController();
+    final partyController = TextEditingController();
     final plateController = TextEditingController();
-    return Scaffold(
-      appBar: AppBar(title: const Text('New Measurement Book'), centerTitle: true),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Create New Book', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Book Name',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.book),
+    DateTime tempDate = DateTime.now();
+
+    return StatefulBuilder(builder: (context, setLocalState) {
+      return Scaffold(
+        appBar: AppBar(title: Text('new_book'.tr), centerTitle: true),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Card(
+              elevation: 8,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('create_start'.tr, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: graniteController,
+                      decoration: InputDecoration(
+                        labelText: 'granite_name'.tr,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.landscape),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: plateController,
-                    decoration: const InputDecoration(
-                      labelText: 'Number Plate (Optional)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.directions_car),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: partyController,
+                      decoration: InputDecoration(
+                        labelText: 'party_name'.tr,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.person),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _currentUnit,
-                    decoration: const InputDecoration(
-                      labelText: 'Measurement Unit',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.straighten),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: plateController,
+                      decoration: InputDecoration(
+                        labelText: 'number_plate'.tr,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.directions_car),
+                      ),
                     ),
-                    items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: Text('date'.tr),
+                      subtitle: Text('${tempDate.day}/${tempDate.month}/${tempDate.year}'),
+                      leading: const Icon(Icons.calendar_today),
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: tempDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setLocalState(() => tempDate = picked);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _currentUnit,
+                      decoration: InputDecoration(
+                        labelText: 'unit'.tr,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.straighten),
+                      ),
+                      items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setLocalState(() {
+                            _currentUnit = val;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.all(16),
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      ),
+                      onPressed: () {
+                        if (graniteController.text.trim().isEmpty || partyController.text.trim().isEmpty || plateController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+                          return;
+                        }
                         setState(() {
-                          _currentUnit = val;
+                          _bookId = DateTime.now().millisecondsSinceEpoch.toString();
+                          _graniteName = graniteController.text.trim();
+                          _partyName = partyController.text.trim();
+                          _numberPlate = plateController.text.trim();
+                          _bookName = '$_partyName - $_graniteName';
+                          _bookDate = tempDate;
+                          _slabs = List.generate(200, (i) => SlabEntry(slabNo: i + 1));
+                          _recalculateSlabNumbers();
+                          _saveBookLive();
                         });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.all(16),
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      },
+                      child: Text('create_start'.tr, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                    onPressed: () {
-                      if (nameController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a book name')));
-                        return;
-                      }
-                      setState(() {
-                        _bookId = DateTime.now().millisecondsSinceEpoch.toString();
-                        _bookName = nameController.text.trim();
-                        _numberPlate = plateController.text.trim();
-                        _slabs = List.generate(200, (i) => SlabEntry(slabNo: i + 1));
-                        _recalculateSlabNumbers();
-                        _saveBookLive();
-                      });
-                    },
-                    child: const Text('Create & Start Measuring', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   @override
@@ -674,8 +721,8 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     );
   }
 
-  Future<Uint8List> _generatePdfData(PdfPageFormat format) async {
-    final pdf = _buildPdfDocument(_bookName);
+  Future<Uint8List> _generatePdfData(PdfPageFormat format, {bool isPreview = false}) async {
+    final pdf = _buildPdfDocument(_bookName, isPreview: isPreview);
     return pdf.save();
   }
 
@@ -684,7 +731,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       return Scaffold(
         appBar: AppBar(title: const Text('PDF Preview')),
         body: PdfPreview(
-          build: _generatePdfData,
+          build: (format) => _generatePdfData(format, isPreview: true),
         ),
       );
     }));
@@ -726,7 +773,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     }
   }
 
-  pw.Document _buildPdfDocument(String title) {
+  pw.Document _buildPdfDocument(String title, {bool isPreview = false}) {
     final pdf = pw.Document();
     
     final List<SlabEntry> expandedSlabs = [];
@@ -748,10 +795,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       return pdf;
     }
 
-    for (int i = 0; i < expandedSlabs.length; i += 120) {
-      final chunk = expandedSlabs.sublist(i, i + 120 > expandedSlabs.length ? expandedSlabs.length : i + 120);
-      final leftChunk = chunk.sublist(0, chunk.length > 60 ? 60 : chunk.length);
-      final rightChunk = chunk.length > 60 ? chunk.sublist(60) : <SlabEntry>[];
+    for (int i = 0; i < expandedSlabs.length; i += 100) {
+      final chunk = expandedSlabs.sublist(i, i + 100 > expandedSlabs.length ? expandedSlabs.length : i + 100);
+      final leftChunk = chunk.sublist(0, chunk.length > 50 ? 50 : chunk.length);
+      final rightChunk = chunk.length > 50 ? chunk.sublist(50) : <SlabEntry>[];
 
       pdf.addPage(
         pw.Page(
@@ -768,18 +815,28 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
               children: [
                 pw.Header(
                   level: 0,
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                     children: [
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      pw.Center(
+                        child: pw.Text('ESTIMATED SHEET', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
+                      ),
+                      pw.SizedBox(height: 12),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text(title, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-                          if (_numberPlate.isNotEmpty)
-                            pw.Text('Plate: $_numberPlate', style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                          pw.Text('Party: $_partyName', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Plate: ${(_numberPlate.isNotEmpty ? _numberPlate : "N/A")}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                         ]
                       ),
-                      pw.Text('Unit: $_currentUnit', style: pw.TextStyle(fontSize: 14)),
+                      pw.SizedBox(height: 4),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Granite: ${(_graniteName.isNotEmpty ? _graniteName : "N/A")}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Date: ${_bookDate.day.toString().padLeft(2, '0')}/${_bookDate.month.toString().padLeft(2, '0')}/${_bookDate.year}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        ]
+                      ),
                     ]
                   ),
                 ),
@@ -801,7 +858,12 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                     pw.Text('Total Slabs: $_totalQuantity', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
                     pw.Text('Total Area: ${_totalArea.toStringAsFixed(2)} $_currentUnit', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
                   ]
-                )
+                ),
+                pw.SizedBox(height: 10),
+                if (isPreview)
+                  pw.Center(
+                    child: pw.Text('developed_by'.tr + ' Panchasara Poojan', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+                  )
               ]
             );
           }

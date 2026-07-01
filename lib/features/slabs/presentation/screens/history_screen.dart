@@ -3,6 +3,7 @@ import '../../data/models/slab_models.dart';
 import '../../services/storage_service.dart';
 import 'slab_measurement_screen.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/localization/app_translations.dart';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -112,18 +113,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
           return [
             pw.Header(
               level: 0,
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 children: [
-                  pw.Text(book.name, style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold)),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  pw.Center(
+                    child: pw.Text('ESTIMATED SHEET', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Unit: ${book.unit}', style: pw.TextStyle(fontSize: 18)),
-                      if (book.numberPlate != null && book.numberPlate!.isNotEmpty)
-                        pw.Text('No. Plate: ${book.numberPlate}', style: pw.TextStyle(fontSize: 14)),
+                      pw.Text('Party: ${book.partyName ?? "N/A"}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Plate: ${(book.numberPlate != null && book.numberPlate!.isNotEmpty ? book.numberPlate : "N/A")}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                     ]
-                  )
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Granite: ${book.graniteName ?? "N/A"}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Date: ${book.date.day.toString().padLeft(2, '0')}/${book.date.month.toString().padLeft(2, '0')}/${book.date.year}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    ]
+                  ),
                 ]
               ),
             ),
@@ -226,7 +237,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Saved Books'),
+        title: Text('history'.tr),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -334,7 +345,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           widget.onNewBook();
         },
         icon: const Icon(Icons.add_rounded),
-        label: const Text('New Book', style: TextStyle(fontWeight: FontWeight.bold)),
+        label: Text('new_book'.tr, style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.amber,
         foregroundColor: Colors.black,
       ),

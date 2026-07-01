@@ -4,6 +4,8 @@ import '../../../slabs/services/storage_service.dart';
 import '../../../slabs/data/models/slab_models.dart';
 import '../../../slabs/presentation/screens/slab_measurement_screen.dart';
 import '../../../../main.dart';
+import '../../../../core/localization/app_translations.dart';
+import '../../../about/presentation/screens/about_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onStartMeasurement;
@@ -47,11 +49,23 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Jamna Stone', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+        title: Text('app_title'.tr, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.language),
+            tooltip: 'Change Language',
+            onSelected: (String lang) {
+              AppTranslations.currentLocale.value = lang;
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(value: 'en', child: Text('English')),
+              const PopupMenuItem<String>(value: 'hi', child: Text('हिंदी')),
+              const PopupMenuItem<String>(value: 'gu', child: Text('ગુજરાતી')),
+            ],
+          ),
           IconButton(
             icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
             onPressed: () {
@@ -81,17 +95,17 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('App Guide', style: TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
+                  Text('app_guide'.tr, style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 16),
-                  const Text(
-                    '1. Tap "Start Measuring" to create a new book.\n'
-                    '2. Enter the Book Name and an optional Number Plate.\n'
-                    '3. Add Slabs: Enter the length, width, and quantity for each row.\n'
-                    '4. The app auto-increments the slab numbers for you.\n'
-                    '5. Switch between Card View and Table View for easy data entry.\n'
-                    '6. Use the History tab to manage, edit, or export saved books.\n'
-                    '7. Export data instantly as PDF or Images, or directly share them.',
-                    style: TextStyle(color: Colors.black87, fontSize: 16, height: 1.5),
+                  Text(
+                    '${'guide_1'.tr}\n'
+                    '${'guide_2'.tr}\n'
+                    '${'guide_3'.tr}\n'
+                    '${'guide_4'.tr}\n'
+                    '${'guide_5'.tr}\n'
+                    '${'guide_6'.tr}\n'
+                    '${'guide_7'.tr}',
+                    style: const TextStyle(color: Colors.black87, fontSize: 16, height: 1.5),
                   ),
                   const SizedBox(height: 24),
                   Center(
@@ -103,12 +117,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.add_box_rounded),
-                          SizedBox(width: 8),
-                          Text('Start Measuring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const Icon(Icons.add_box_rounded),
+                          const SizedBox(width: 8),
+                          Text('start_measuring'.tr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         ],
                       ),
                     ),
@@ -116,6 +130,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
+            const SizedBox(height: 32),
+            Center(
+              child: Column(
+                children: [
+                  Text('developed_by'.tr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text('Panchasara Poojan', style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
+                    icon: const Icon(Icons.info_outline, size: 16),
+                    label: Text('about_us'.tr),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? Colors.grey[300] : Colors.grey[700],
+                      side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

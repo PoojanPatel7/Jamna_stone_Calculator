@@ -41,6 +41,8 @@ class SlabEntry {
 class SlabBook {
   String id;
   String name;
+  String? graniteName;
+  String? partyName;
   String? numberPlate;
   DateTime date;
   String unit;
@@ -49,6 +51,8 @@ class SlabBook {
   SlabBook({
     required this.id,
     required this.name,
+    this.graniteName,
+    this.partyName,
     this.numberPlate,
     required this.date,
     required this.unit,
@@ -58,6 +62,8 @@ class SlabBook {
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
+    'graniteName': graniteName,
+    'partyName': partyName,
     'numberPlate': numberPlate,
     'date': date.toIso8601String(),
     'unit': unit,
@@ -67,6 +73,8 @@ class SlabBook {
   factory SlabBook.fromJson(Map<String, dynamic> json) => SlabBook(
     id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
     name: json['name'] ?? 'Untitled Book',
+    graniteName: json['graniteName'],
+    partyName: json['partyName'],
     numberPlate: json['numberPlate'],
     date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
     unit: json['unit'] ?? 'Feet',
