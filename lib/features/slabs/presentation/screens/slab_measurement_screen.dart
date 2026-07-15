@@ -209,6 +209,15 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     return _slabs.where((s) => s.length > 0 || s.width > 0).length;
   }
   
+  String get _displayUnit {
+    if (_currentUnit == 'Inches' || _currentUnit == 'Feet') {
+      return 'Sq Feet';
+    } else if (_currentUnit == 'Cm' || _currentUnit == 'Meter') {
+      return 'Sq Meter';
+    }
+    return 'Sq $_currentUnit';
+  }
+  
   Widget _buildCreateBookView() {
     final graniteController = TextEditingController();
     final partyController = TextEditingController();
@@ -393,9 +402,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                   if (confirm == true) {
                     _saveStateForUndo();
                     setState(() {
-                      _slabs.clear();
-                      _nextSlabNo = 1;
-                      _recalculateSlabNumbers();
+                      _formSessionId = UniqueKey().toString();
+                      for (var slab in _slabs) {
+                        slab.length = 0.0;
+                        slab.width = 0.0;
+                      }
                       _saveBookLive();
                     });
                   }
@@ -450,7 +461,29 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_bookId != null) ...[
+            Text(_bookName, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text('Party: ${_partyName.isNotEmpty ? _partyName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
+                Expanded(child: Text('Granite: ${_graniteName.isNotEmpty ? _graniteName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text('Date: ${_bookDate.day}/${_bookDate.month}/${_bookDate.year}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
+                if (_numberPlate.isNotEmpty)
+                  Expanded(child: Text('Plate: $_numberPlate', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+              ],
+            ),
+            const Divider(color: Colors.black26),
+            const SizedBox(height: 4),
+          ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -458,7 +491,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Total Area', style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold)),
-                  Text('${_totalArea.toStringAsFixed(2)} $_currentUnit', style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.w900)),
+                  Text('${_totalArea.toStringAsFixed(2)} $_displayUnit', style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.w900)),
                 ],
               ),
               Column(
@@ -502,13 +535,15 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: const Row(
             children: [
-              Expanded(flex: 3, child: Text('Slab\nNo.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-              SizedBox(width: 4),
-              Expanded(flex: 4, child: Text('Length', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-              SizedBox(width: 4),
-              Expanded(flex: 4, child: Text('Width', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-              SizedBox(width: 4),
-              Expanded(flex: 4, child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+              SizedBox(width: 2),
+              Expanded(flex: 3, child: Text('L', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+              SizedBox(width: 2),
+              Expanded(flex: 3, child: Text('W', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+              SizedBox(width: 2),
+              Expanded(flex: 3, child: Text('Area', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+              SizedBox(width: 2),
+              Expanded(flex: 3, child: Text('Act.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
             ],
           ),
         ),
@@ -524,12 +559,12 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 3, 
+                      flex: 2, 
                       child: Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 2),
                     Expanded(
-                      flex: 4,
+                      flex: 3,
                       child: _NumberInputField(
                         key: ValueKey('$_formSessionId-$index-length'),
                         label: 'L',
@@ -543,9 +578,9 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 2),
                     Expanded(
-                      flex: 4,
+                      flex: 3,
                       child: _NumberInputField(
                         key: ValueKey('$_formSessionId-$index-width'),
                         label: 'W',
@@ -559,9 +594,25 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 2),
                     Expanded(
-                      flex: 4,
+                      flex: 3,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).dividerColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4)
+                        ),
+                        child: Text(
+                          slab.getArea(_currentUnit).toStringAsFixed(2),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      flex: 3,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
@@ -569,7 +620,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                             child: IconButton(
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              iconSize: 22,
+                              iconSize: 20,
                               tooltip: 'Copy from above row',
                               icon: const Icon(Icons.arrow_downward_rounded, color: Colors.blueAccent),
                               onPressed: index > 0 ? () => _copyPreviousRow(index) : null,
@@ -579,7 +630,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                             child: IconButton(
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              iconSize: 22,
+                              iconSize: 20,
                               tooltip: 'Clear row',
                               icon: const Icon(Icons.clear_rounded, color: Colors.redAccent),
                               onPressed: () => _clearRow(index),
@@ -649,7 +700,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                   },
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: _NumberInputField(
                   key: ValueKey('$_formSessionId-$index-width'),
@@ -664,6 +715,27 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                     if (mounted) setState(() {});
                   },
                 ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).dividerColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3))
+                  ),
+                  child: Column(
+                    children: [
+                      const Text('Area', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      Text(
+                        slab.getArea(_currentUnit).toStringAsFixed(2),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                )
               ),
             ],
           ),
@@ -738,7 +810,8 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   }
 
   Future<void> _askForFileName({required bool isPdf, required String action}) async {
-    final controller = TextEditingController(text: _bookName);
+    final String defaultName = _partyName.trim().isNotEmpty ? _partyName.trim() : _bookName.trim();
+    final controller = TextEditingController(text: defaultName);
     final result = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -799,6 +872,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       final chunk = expandedSlabs.sublist(i, i + 100 > expandedSlabs.length ? expandedSlabs.length : i + 100);
       final leftChunk = chunk.sublist(0, chunk.length > 50 ? 50 : chunk.length);
       final rightChunk = chunk.length > 50 ? chunk.sublist(50) : <SlabEntry>[];
+      
+      final bool isLastPage = (i + 100) >= expandedSlabs.length;
+      final int pageTotalQuantity = chunk.length;
+      final double pageTotalArea = chunk.fold<double>(0.0, (sum, slab) => sum + slab.getArea(_currentUnit));
 
       pdf.addPage(
         pw.Page(
@@ -855,10 +932,20 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Total Slabs: $_totalQuantity', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Total Area: ${_totalArea.toStringAsFixed(2)} $_currentUnit', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Page Slabs: $pageTotalQuantity', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                    pw.Text('Page Area: ${pageTotalArea.toStringAsFixed(2)} $_displayUnit', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                   ]
                 ),
+                if (isLastPage) ...[
+                  pw.Divider(),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Total Slabs: $_totalQuantity', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Total Area: ${_totalArea.toStringAsFixed(2)} $_displayUnit', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    ]
+                  ),
+                ],
                 pw.SizedBox(height: 10),
                 if (isPreview)
                   pw.Center(

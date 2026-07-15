@@ -18,6 +18,7 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   SlabBook? _activeBook;
   UniqueKey _measurementKey = UniqueKey(); // Used to force reload when changing books
+  UniqueKey _historyKey = UniqueKey(); // Force reload when switching to history tab
 
   @override
   void initState() {
@@ -30,6 +31,9 @@ class _MainScreenState extends State<MainScreen> {
 
   void _onTabTapped(int index) {
     setState(() {
+      if (index == 2) {
+        _historyKey = UniqueKey();
+      }
       _currentIndex = index;
     });
   }
@@ -76,7 +80,7 @@ class _MainScreenState extends State<MainScreen> {
                 });
               },
             ),
-            HistoryScreen(onBookOpened: _openBookFromHistory, onNewBook: _startNewMeasurement),
+            HistoryScreen(key: _historyKey, onBookOpened: _openBookFromHistory, onNewBook: _startNewMeasurement),
           ],
         ),
       bottomNavigationBar: Container(

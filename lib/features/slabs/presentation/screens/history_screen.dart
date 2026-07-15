@@ -57,11 +57,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
               TextField(
                 controller: nameController,
                 decoration: const InputDecoration(labelText: 'Book Name'),
+                maxLines: null,
                 autofocus: true,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: plateController,
+                maxLines: null,
                 decoration: const InputDecoration(labelText: 'Number Plate (Optional)'),
               ),
             ],
@@ -249,90 +251,159 @@ class _HistoryScreenState extends State<HistoryScreen> {
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final book = _history[index];
-                int totalSlabs = book.slabs.fold(0, (sum, slab) => sum + slab.quantity);
+                int totalSlabs = book.slabs.where((s) => s.length > 0 || s.width > 0).fold(0, (sum, slab) => sum + slab.quantity);
                 double totalArea = book.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(book.unit));
                 
                 return InkWell(
                   onTap: () => _openBook(book),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.amber.withOpacity(0.2)),
+                      gradient: LinearGradient(
+                        colors: [Theme.of(context).cardColor, Theme.of(context).cardColor.withOpacity(0.95)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.amber.withOpacity(0.3), width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          color: AppColors.amber.withOpacity(0.1),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.amber.withOpacity(0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.book_rounded, color: AppColors.amber),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                                Text(book.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              if (book.numberPlate != null && book.numberPlate!.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.grey),
-                                  ),
-                                  child: Text(
-                                    book.numberPlate!,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                                  ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              ],
-                              const SizedBox(height: 4),
-                              Text(
-                                '${DateFormat('MMM dd, yyyy - hh:mm a').format(book.date)}',
-                                style: Theme.of(context).textTheme.bodySmall,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.amber.withOpacity(0.4),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Qty: $totalSlabs | Area: ${totalArea.toStringAsFixed(2)} ${book.unit}',
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                              child: const Icon(Icons.description_rounded, color: Colors.black87, size: 24),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    book.name, 
+                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.5),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM dd, yyyy • hh:mm a').format(book.date),
+                                    style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.8), fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              onSelected: (value) {
+                                if (value == 'edit') {
+                                  _editBookDetails(book);
+                                } else if (value == 'export') {
+                                  _openBook(book);
+                                } else if (value == 'delete') {
+                                  _deleteBookWithConfirmation(book);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 20), SizedBox(width: 8), Text('Edit Details')])),
+                                const PopupMenuItem(value: 'export', child: Row(children: [Icon(Icons.open_in_new_rounded, size: 20), SizedBox(width: 8), Text('Open & Export')])),
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_rounded, color: Colors.red, size: 20), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))])),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).dividerColor.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Column(
+                                children: [
+                                  const Text('Slabs', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                                  const SizedBox(height: 4),
+                                  Text('$totalSlabs', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                                ],
+                              ),
+                              Container(width: 1, height: 30, color: Theme.of(context).dividerColor.withOpacity(0.2)),
+                              Column(
+                                children: [
+                                  const Text('Total Area', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                                  const SizedBox(height: 4),
+                                  Text('${totalArea.toStringAsFixed(2)} ${book.unit}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.amber)),
+                                ],
                               ),
                             ],
                           ),
                         ),
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert),
-                          onSelected: (value) {
-                            if (value == 'edit') {
-                              _editBookDetails(book);
-                            } else if (value == 'export') {
-                              _openBook(book);
-                            } else if (value == 'delete') {
-                              _deleteBookWithConfirmation(book);
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(value: 'edit', child: Text('Edit Details')),
-                            const PopupMenuItem(value: 'export', child: Text('Open & Export')),
-                            const PopupMenuItem(
-                              value: 'delete', 
-                              child: Text('Delete', style: TextStyle(color: Colors.red)),
-                            ),
-                          ],
-                        ),
+                        if ((book.partyName != null && book.partyName!.isNotEmpty) || (book.numberPlate != null && book.numberPlate!.isNotEmpty)) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              if (book.partyName != null && book.partyName!.isNotEmpty)
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.person_rounded, size: 14, color: Colors.grey),
+                                      const SizedBox(width: 4),
+                                      Expanded(child: Text(book.partyName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey), overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                ),
+                              if (book.numberPlate != null && book.numberPlate!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black87,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.directions_car_rounded, size: 12, color: AppColors.amber),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        book.numberPlate!,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          )
+                        ]
                       ],
                     ),
                   ),
