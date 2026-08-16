@@ -16,7 +16,7 @@ class AboutScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Icon(Icons.calculate_rounded, size: 80, color: Colors.amber),
+            const Icon(Icons.calculate_rounded, size: 80, color: Colors.blue),
             const SizedBox(height: 16),
             Text('app_title'.tr, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),

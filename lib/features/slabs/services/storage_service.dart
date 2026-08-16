@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models/slab_models.dart';
@@ -44,9 +45,16 @@ class StorageService {
     await prefs.remove(_draftKey);
   }
 
-  static Future<void> _writeHistory(List<SlabBook> history) async {
-    final file = await _getHistoryFile();
+  static Future<void> writeHistory(List<SlabBook> history) async {
     final jsonString = jsonEncode(history.map((e) => e.toJson()).toList());
+    
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_historyKey, jsonString);
+      return;
+    }
+
+    final file = await _getHistoryFile();
     
     // Write to a temporary file first for atomic safety against crashes
     final tempFile = File('${file.path}.tmp');
@@ -57,6 +65,8 @@ class StorageService {
   static Future<void> saveBook(SlabBook book) async {
     final history = await loadHistory();
     
+    book.isSynced = false;
+    
     final existingIndex = history.indexWhere((b) => b.id == book.id);
     if (existingIndex >= 0) {
       history[existingIndex] = book;
@@ -64,10 +74,24 @@ class StorageService {
       history.add(book);
     }
     
-    await _writeHistory(history);
+    await writeHistory(history);
   }
 
   static Future<List<SlabBook>> loadHistory() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString(_historyKey);
+      if (jsonString != null) {
+        try {
+          final List decoded = jsonDecode(jsonString);
+          return decoded.map((e) => SlabBook.fromJson(e as Map<String, dynamic>)).toList();
+        } catch (e) {
+          return [];
+        }
+      }
+      return [];
+    }
+
     final file = await _getHistoryFile();
     
     if (await file.exists()) {
@@ -88,7 +112,7 @@ class StorageService {
           final history = decoded.map((e) => SlabBook.fromJson(e as Map<String, dynamic>)).toList();
           
           // Save to file and remove from SharedPreferences to complete migration
-          await _writeHistory(history);
+          await writeHistory(history);
           await prefs.remove(_historyKey);
           
           return history;
@@ -104,6 +128,6 @@ class StorageService {
   static Future<void> deleteBook(String id) async {
     final history = await loadHistory();
     history.removeWhere((b) => b.id == id);
-    await _writeHistory(history);
+    await writeHistory(history);
   }
 }

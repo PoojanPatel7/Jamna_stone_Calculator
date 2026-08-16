@@ -1,9 +1,14 @@
+import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../data/models/slab_models.dart';
 import '../../services/storage_service.dart';
 import 'slab_measurement_screen.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/localization/app_translations.dart';
+import '../../services/backup_service.dart';
+import '../../../../core/utils/pdf_generator.dart';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -22,6 +27,8 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   List<SlabBook> _history = [];
+  bool _isBackingUp = false;
+  double _backupProgress = 0.0;
 
   @override
   void initState() {
@@ -88,90 +95,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  pw.Document _buildPdfDocumentForBook(SlabBook book) {
-    final pdf = pw.Document();
-    
-    final List<SlabEntry> expandedSlabs = [];
-    for (var s in book.slabs) {
-      if (s.quantity <= 0 || s.length <= 0 || s.width <= 0) continue;
-      for (int i = 0; i < s.quantity; i++) {
-        expandedSlabs.add(SlabEntry(
-          slabNo: s.slabNo + i,
-          length: s.length,
-          width: s.width,
-          quantity: 1,
-        ));
-      }
-    }
-    
-    final int totalQuantity = book.slabs.fold(0, (sum, slab) => sum + slab.quantity);
-    final double totalArea = book.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(book.unit));
-    
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                children: [
-                  pw.Center(
-                    child: pw.Text('ESTIMATED SHEET', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
-                  ),
-                  pw.SizedBox(height: 12),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('Party: ${book.partyName ?? "N/A"}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Plate: ${(book.numberPlate != null && book.numberPlate!.isNotEmpty ? book.numberPlate : "N/A")}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    ]
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('Granite: ${book.graniteName ?? "N/A"}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Date: ${book.date.day.toString().padLeft(2, '0')}/${book.date.month.toString().padLeft(2, '0')}/${book.date.year}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    ]
-                  ),
-                ]
-              ),
-            ),
-            pw.SizedBox(height: 10),
-            pw.TableHelper.fromTextArray(
-              context: context,
-              cellAlignment: pw.Alignment.center,
-              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
-              headerStyle: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-              cellStyle: const pw.TextStyle(fontSize: 16),
-              headers: ['No.', 'Length', 'Width', 'Area'],
-              data: expandedSlabs.map<List<String>>((s) {
-                return [
-                  '${s.slabNo}',
-                  s.length.toString(),
-                  s.width.toString(),
-                  '${s.getArea(book.unit).toStringAsFixed(2)} ${book.unit}'
-                ];
-              }).toList(),
-            ),
-            pw.SizedBox(height: 20),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Total Slabs: $totalQuantity', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Total Area: ${totalArea.toStringAsFixed(2)} ${book.unit}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-              ]
-            )
-          ];
-        }
-      )
-    );
-    return pdf;
-  }
-
   Future<void> _deleteBookWithConfirmation(SlabBook book) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -190,7 +113,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Expanded(
                   child: PdfPreview(
                     build: (format) async {
-                      final pdf = _buildPdfDocumentForBook(book);
+                      final pdf = PdfGenerator.buildPdfDocumentForBook(book);
                       return pdf.save();
                     },
                     allowPrinting: false,
@@ -234,6 +157,340 @@ class _HistoryScreenState extends State<HistoryScreen> {
     widget.onBookOpened(book);
   }
 
+  Future<void> _startBackup() async {
+    setState(() {
+      _isBackingUp = true;
+      _backupProgress = 0.0;
+    });
+
+    try {
+      await BackupService.syncToLocalFolder(
+        pdfGenerator: PdfGenerator.buildPdfDocumentForBook,
+        onProgress: (progress) {
+          setState(() {
+            _backupProgress = progress;
+          });
+        },
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup successful!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBackingUp = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _startRestore() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+    
+    final dbMap = await BackupService.getBackupData();
+    if (mounted) Navigator.pop(context); // close loading
+    
+    if (dbMap == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No backup found.')));
+      return;
+    }
+    
+    int backupBooksCount = 0;
+    int backupStockCount = 0;
+    
+    if (dbMap.containsKey('history')) {
+      backupBooksCount = (dbMap['history'] as List).length;
+    }
+    if (dbMap.containsKey('stockEntries')) {
+      backupStockCount = (dbMap['stockEntries'] as List).length;
+    }
+    
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        bool isConfirmed = false;
+        bool isScanning = false;
+        bool isFinished = false;
+        bool isError = false;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            void startProcess() async {
+              setState(() {
+                isConfirmed = true;
+                isScanning = true;
+              });
+              
+              await Future.delayed(const Duration(milliseconds: 1500));
+              if (mounted) setState(() => isScanning = false);
+              
+              final success = await BackupService.restoreFromLocalFolder(dbMap);
+              
+              if (mounted) {
+                if (success) {
+                  await _loadHistory();
+                  setState(() => isFinished = true);
+                  
+                  await Future.delayed(const Duration(milliseconds: 2500));
+                  if (mounted) {
+                    Navigator.pop(context);
+                  }
+                } else {
+                  setState(() {
+                    isFinished = true;
+                    isError = true;
+                  });
+                }
+              }
+            }
+            
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            
+            return PopScope(
+              canPop: false,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: MediaQuery.of(context).size.width * 0.85,
+                      constraints: BoxConstraints(
+                        maxWidth: 400,
+                        maxHeight: MediaQuery.of(context).size.height * 0.8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(32),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 30, spreadRadius: 5, offset: const Offset(0, 10)),
+                        ],
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(32.0),
+                        child: AnimatedSize(
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeOutCubic,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            child: _buildImportContent(
+                              key: ValueKey('restore_${isConfirmed}_${isScanning}_${isFinished}_${isError}'),
+                              isDark: isDark,
+                              isConfirmed: isConfirmed,
+                              isScanning: isScanning,
+                              isFinished: isFinished,
+                              isError: isError,
+                              backupBooksCount: backupBooksCount,
+                              backupStockCount: backupStockCount,
+                              onStart: startProcess,
+                              onClose: () => Navigator.pop(context),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(animation.value),
+          child: Opacity(
+            opacity: animation.value,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildImportContent({
+    required Key key,
+    required bool isDark,
+    required bool isConfirmed,
+    required bool isScanning,
+    required bool isFinished,
+    required bool isError,
+    required int backupBooksCount,
+    required int backupStockCount,
+    required VoidCallback onStart,
+    required VoidCallback onClose,
+  }) {
+    if (isError) {
+      return Column(
+        key: key,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.error_outline_rounded, color: Colors.red, size: 56)
+                .animate().shake(duration: 400.ms),
+          ),
+          const SizedBox(height: 24),
+          const Text('Import Failed', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+          const SizedBox(height: 12),
+          Text('An error occurred while loading data.', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black87)),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onClose,
+              style: ElevatedButton.styleFrom(backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200, foregroundColor: isDark ? Colors.white : Colors.black, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (isFinished) {
+      return Column(
+        key: key,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 64)
+                .animate().scale(duration: 600.ms, curve: Curves.elasticOut),
+          ),
+          const SizedBox(height: 24),
+          const Text('Data Imported!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+          const SizedBox(height: 12),
+          Text('Your local storage is now synced with the backup.', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black87)),
+        ],
+      );
+    }
+
+    if (isScanning || isConfirmed) {
+      return Column(
+        key: key,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
+            child: isScanning 
+                ? const Icon(Icons.manage_search_rounded, color: Colors.blue, size: 56).animate(onPlay: (controller) => controller.repeat(reverse: true)).scaleXY(begin: 0.9, end: 1.1, duration: 600.ms)
+                : const Icon(Icons.cloud_sync_rounded, color: Colors.blue, size: 56).animate(onPlay: (controller) => controller.repeat()).rotate(duration: 2.seconds),
+          ),
+          const SizedBox(height: 32),
+          Text(isScanning ? 'Scanning for missing data...' : 'Importing data...', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
+          const SizedBox(height: 24),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: const LinearProgressIndicator(minHeight: 12),
+          ),
+        ],
+      );
+    }
+
+    // Default Initial State
+    return Column(
+      key: key,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Colors.blue, Colors.lightBlueAccent], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            shape: BoxShape.circle,
+            boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 8))],
+          ),
+          child: const Icon(Icons.cloud_download_rounded, color: Colors.white, size: 48),
+        ),
+        const SizedBox(height: 24),
+        Text('Load Backup Data', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
+        const SizedBox(height: 8),
+        Text('Only missing items will be imported to prevent duplicates.', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 14), textAlign: TextAlign.center),
+        const SizedBox(height: 32),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade50, borderRadius: BorderRadius.circular(20), border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade200)),
+          child: Column(
+            children: [
+              _buildStatRow('Books in Backup', '$backupBooksCount', Icons.book_rounded, isDark),
+              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
+              _buildStatRow('Stock in Backup', '$backupStockCount', Icons.inventory_2_rounded, isDark),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: onStart,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue, 
+              foregroundColor: Colors.white, 
+              padding: const EdgeInsets.symmetric(vertical: 18), 
+              elevation: 8,
+              shadowColor: Colors.blue.withOpacity(0.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+            ),
+            child: const Text('Confirm Load Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextButton(
+          onPressed: onClose,
+          child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 16, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatRow(String title, String value, IconData icon, bool isDark) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: Colors.blue, size: 20),
+        ),
+        const SizedBox(width: 16),
+        Expanded(child: Text(title, style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500, fontSize: 15))),
+        Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: value.startsWith('0 ') ? (isDark ? Colors.white38 : Colors.black38) : Colors.orange.shade600)),
+      ],
+    );
+  }
+
+  Future<void> _shareBook(SlabBook book) async {
+    final pdf = PdfGenerator.buildPdfDocumentForBook(book);
+    final bytes = await pdf.save();
+    
+    String baseName = '';
+    if (book.partyName != null && book.partyName!.isNotEmpty) {
+      baseName += book.partyName!;
+    }
+    if (book.graniteName != null && book.graniteName!.isNotEmpty) {
+      if (baseName.isNotEmpty) baseName += '-';
+      baseName += book.graniteName!;
+    }
+    if (baseName.isEmpty) {
+      baseName = 'Book_${book.id}';
+    }
+    final safeName = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    
+    await Printing.sharePdf(bytes: bytes, filename: '$safeName.pdf');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -242,8 +499,32 @@ class _HistoryScreenState extends State<HistoryScreen> {
         title: Text('history'.tr),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.blue),
+            onSelected: (value) {
+              if (value == 'backup') {
+                _startBackup();
+              } else if (value == 'restore') {
+                _startRestore();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'backup',
+                child: Row(children: [Icon(Icons.backup_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Backup Data')]),
+              ),
+              const PopupMenuItem(
+                value: 'restore',
+                child: Row(children: [Icon(Icons.restore_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Load Data')]),
+              ),
+            ],
+          ),
+        ],
       ),
-      body: _history.isEmpty
+      body: Stack(
+        children: [
+          _history.isEmpty
           ? const Center(child: Text('No saved slab books found.'))
           : ListView.separated(
               padding: const EdgeInsets.all(16),
@@ -266,10 +547,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.amber.withOpacity(0.3), width: 1.5),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.amber.withOpacity(0.1),
+                          color: AppColors.primary.withOpacity(0.1),
                           blurRadius: 12,
                           spreadRadius: 2,
                           offset: const Offset(0, 4),
@@ -285,31 +566,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+                                  colors: [Colors.lightBlueAccent, Colors.blue],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.amber.withOpacity(0.4),
+                                    color: AppColors.primary.withOpacity(0.4),
                                     blurRadius: 8,
                                     offset: const Offset(0, 2),
                                   )
                                 ],
                               ),
-                              child: const Icon(Icons.description_rounded, color: Colors.black87, size: 24),
+                              child: const Icon(Icons.description_rounded, color: Colors.white, size: 24),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    book.name, 
-                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.5),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          book.name, 
+                                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.5),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      if (book.isSynced)
+                                        const Icon(Icons.cloud_done_rounded, color: Colors.green, size: 20)
+                                      else
+                                        const Icon(Icons.sync_problem_rounded, color: Colors.orange, size: 20),
+                                    ],
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -327,12 +619,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   _editBookDetails(book);
                                 } else if (value == 'export') {
                                   _openBook(book);
+                                } else if (value == 'share') {
+                                  _shareBook(book);
                                 } else if (value == 'delete') {
                                   _deleteBookWithConfirmation(book);
                                 }
                               },
                               itemBuilder: (context) => [
                                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 20), SizedBox(width: 8), Text('Edit Details')])),
+                                const PopupMenuItem(value: 'share', child: Row(children: [Icon(Icons.share_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Share PDF')])),
                                 const PopupMenuItem(value: 'export', child: Row(children: [Icon(Icons.open_in_new_rounded, size: 20), SizedBox(width: 8), Text('Open & Export')])),
                                 const PopupMenuDivider(),
                                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_rounded, color: Colors.red, size: 20), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))])),
@@ -362,7 +657,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 children: [
                                   const Text('Total Area', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                                   const SizedBox(height: 4),
-                                  Text('${totalArea.toStringAsFixed(2)} ${book.unit}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.amber)),
+                                  Text('${totalArea.toStringAsFixed(2)} ${book.unit}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary)),
                                 ],
                               ),
                             ],
@@ -392,7 +687,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.directions_car_rounded, size: 12, color: AppColors.amber),
+                                      const Icon(Icons.directions_car_rounded, size: 12, color: AppColors.primary),
                                       const SizedBox(width: 4),
                                       Text(
                                         book.numberPlate!,
@@ -410,15 +705,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await StorageService.saveDraft([], 'inch');
-          widget.onNewBook();
-        },
-        icon: const Icon(Icons.add_rounded),
-        label: Text('new_book'.tr, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.amber,
-        foregroundColor: Colors.black,
+          if (_isBackingUp)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.blue),
+                        const SizedBox(height: 16),
+                        Text('Backing up data...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                        const SizedBox(height: 8),
+                        Text('${(_backupProgress * 100).toStringAsFixed(0)}% Complete', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90),
+        child: FloatingActionButton.extended(
+          onPressed: () async {
+            await StorageService.saveDraft([], 'inch');
+            widget.onNewBook();
+          },
+          icon: const Icon(Icons.add_rounded),
+          label: Text('new_book'.tr, style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+        ),
       ),
     );
   }

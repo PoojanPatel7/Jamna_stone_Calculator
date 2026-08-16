@@ -37,7 +37,7 @@ class SlabCountApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               theme: ThemeData(
                 colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFFFFC107),
+                  seedColor: Colors.blue,
                   brightness: Brightness.light,
                 ),
                 useMaterial3: true,
@@ -51,7 +51,7 @@ class SlabCountApp extends StatelessWidget {
               ),
               darkTheme: ThemeData(
                 colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFFFFC107),
+                  seedColor: Colors.blue,
                   brightness: Brightness.dark,
                 ),
                 useMaterial3: true,

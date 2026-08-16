@@ -16,9 +16,9 @@ import '../../../../main.dart'; // For themeNotifier
 import '../../../../core/localization/app_translations.dart';
 
 class AppColors {
-  static const Color amber = Color(0xFFFFC107);
-  static const Gradient amberGradient = LinearGradient(
-    colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+  static const Color primary = Colors.blue;
+  static const Gradient primaryGradient = LinearGradient(
+    colors: [Colors.lightBlueAccent, Colors.blue],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -450,11 +450,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: isLandscape ? 4 : 12),
       margin: EdgeInsets.fromLTRB(16, 8, 16, isLandscape ? 4 : 12),
       decoration: BoxDecoration(
-        gradient: AppColors.amberGradient,
+        gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.amber.withOpacity(0.3),
+            color: AppColors.primary.withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -507,7 +507,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                 decoration: BoxDecoration(color: Colors.white.withOpacity(0.5), borderRadius: BorderRadius.circular(8)),
                 child: DropdownButton<String>(
                   value: _currentUnit,
-                  dropdownColor: AppColors.amber,
+                  dropdownColor: AppColors.primary,
                   underline: const SizedBox(),
                   icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black87, size: 20),
                   style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14),
@@ -531,7 +531,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     return Column(
       children: [
         Container(
-          color: AppColors.amber.withOpacity(0.2),
+          color: AppColors.primary.withOpacity(0.2),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: const Row(
             children: [
@@ -658,14 +658,14 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.amber.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5),
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Slab ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.amber)),
+              Text('Slab ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
               Row(
                 children: [
                   IconButton(
@@ -1137,8 +1137,8 @@ class _NumberInputFieldState extends State<_NumberInputField> {
           borderSide: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: widget.iconColor ?? AppColors.amber, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: widget.iconColor ?? AppColors.primary, width: 2),
         ),
       ),
       onChanged: widget.onChanged,

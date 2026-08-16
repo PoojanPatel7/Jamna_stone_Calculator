@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../home/presentation/screens/home_screen.dart';
 import '../../../slabs/presentation/screens/slab_measurement_screen.dart';
 import '../../../slabs/presentation/screens/history_screen.dart';
+import '../../../stock/presentation/screens/stock_screen.dart';
+import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../../slabs/data/models/slab_models.dart';
 import '../../../../core/localization/app_translations.dart';
 
@@ -66,10 +68,15 @@ class _MainScreenState extends State<MainScreen> {
         }
       },
       child: Scaffold(
+        extendBody: true,
         body: IndexedStack(
           index: _currentIndex,
           children: [
-            HomeScreen(onStartMeasurement: _startNewMeasurement),
+            HomeScreen(
+              onStartMeasurement: _startNewMeasurement,
+              onGoToStock: () => _onTabTapped(3),
+              isActive: _currentIndex == 0,
+            ),
             SlabMeasurementScreen(
               key: _measurementKey, 
               loadedBook: _activeBook,
@@ -80,44 +87,91 @@ class _MainScreenState extends State<MainScreen> {
                 });
               },
             ),
-            HistoryScreen(key: _historyKey, onBookOpened: _openBookFromHistory, onNewBook: _startNewMeasurement),
+            HistoryScreen(
+              key: _historyKey, 
+              onBookOpened: _openBookFromHistory, 
+              onNewBook: _startNewMeasurement
+            ),
+            StockScreen(
+              isActive: _currentIndex == 3,
+            ),
+            const SettingsScreen(),
           ],
         ),
-      bottomNavigationBar: Container(
+        bottomNavigationBar: SafeArea(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark 
+                  ? const Color(0xFF1E1E1E) 
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(0, Icons.home_rounded, 'home'.tr),
+                _buildNavItem(1, Icons.calculate_rounded, 'measure'.tr),
+                _buildNavItem(2, Icons.history_rounded, 'history'.tr),
+                _buildNavItem(3, Icons.inventory_2_rounded, 'Stock'),
+                _buildNavItem(4, Icons.settings_rounded, 'Settings'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isSelected = _currentIndex == index;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return GestureDetector(
+      onTap: () => _onTabTapped(index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(horizontal: isSelected ? 16 : 12, vertical: 8),
         decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
+          color: isSelected 
+              ? Colors.blue.withOpacity(0.15) 
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: _onTabTapped,
-          backgroundColor: Theme.of(context).cardColor,
-          selectedItemColor: AppColors.amber,
-          unselectedItemColor: Colors.grey,
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          items: [
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.home_rounded),
-              label: 'home'.tr,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 24,
+              color: isSelected 
+                  ? Colors.blue 
+                  : Colors.grey.shade500,
             ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.calculate_rounded),
-              label: 'measure'.tr,
-            ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.history_rounded),
-              label: 'history'.tr,
-            ),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ]
           ],
         ),
       ),
-    ));
+    );
   }
 }

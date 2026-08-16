@@ -47,6 +47,7 @@ class SlabBook {
   DateTime date;
   String unit;
   List<SlabEntry> slabs;
+  bool isSynced;
 
   SlabBook({
     required this.id,
@@ -57,6 +58,7 @@ class SlabBook {
     required this.date,
     required this.unit,
     required this.slabs,
+    this.isSynced = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -68,6 +70,7 @@ class SlabBook {
     'date': date.toIso8601String(),
     'unit': unit,
     'slabs': slabs.map((e) => e.toJson()).toList(),
+    'isSynced': isSynced,
   };
 
   factory SlabBook.fromJson(Map<String, dynamic> json) => SlabBook(
@@ -79,5 +82,6 @@ class SlabBook {
     date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
     unit: json['unit'] ?? 'Feet',
     slabs: (json['slabs'] as List?)?.map((e) => SlabEntry.fromJson(e as Map<String, dynamic>)).toList() ?? [],
+    isSynced: json['isSynced'] ?? false,
   );
 }

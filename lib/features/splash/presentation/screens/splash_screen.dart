@@ -12,34 +12,29 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   late VideoPlayerController _controller;
-  bool _isVideoInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.asset('assets/videos/Jamna_stone_new.mp4')
+    
+    _controller = VideoPlayerController.asset('assets/videos/splash_animation.mp4')
       ..initialize().then((_) {
-        setState(() {
-          _isVideoInitialized = true;
-        });
+        setState(() {}); // Ensure the first frame is shown
         _controller.play();
-        
-        // Wait for video duration or a max of 5 seconds to transition
-        Future.delayed(_controller.value.duration > const Duration(seconds: 0) 
-            ? _controller.value.duration
-            : const Duration(seconds: 3), () {
-          if (mounted) {
-            _navigateToHome();
-          }
-        });
-      }).catchError((_) {
-        // Fallback if video fails to load
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) {
-            _navigateToHome();
-          }
-        });
       });
+
+    // Wait for the video to play, 3-4 seconds is usually good
+    Future.delayed(const Duration(milliseconds: 3500), () {
+      if (mounted) {
+        _navigateToHome();
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
   
   void _navigateToHome() {
@@ -55,12 +50,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -72,12 +61,12 @@ class _SplashScreenState extends State<SplashScreen> {
       child: Scaffold(
         backgroundColor: Colors.white,
         body: Center(
-          child: _isVideoInitialized
+          child: _controller.value.isInitialized
               ? AspectRatio(
                   aspectRatio: _controller.value.aspectRatio,
                   child: VideoPlayer(_controller),
                 )
-              : const CircularProgressIndicator(color: Colors.black),
+              : const SizedBox(),
         ),
       ),
     );
