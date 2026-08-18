@@ -13,7 +13,49 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/foundation.dart';
 
+class BackupLog {
+  final String date;
+  final String type; // 'Backup' or 'Load'
+  final String details;
+
+  BackupLog({required this.date, required this.type, required this.details});
+
+  Map<String, dynamic> toJson() => {'date': date, 'type': type, 'details': details};
+  
+  factory BackupLog.fromJson(Map<String, dynamic> json) {
+    return BackupLog(
+      date: json['date'],
+      type: json['type'],
+      details: json['details'],
+    );
+  }
+}
+
 class BackupService {
+  static const String _logKey = 'jamna_stone_backup_logs';
+
+  static Future<void> _logEvent(String type, String details) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> logs = prefs.getStringList(_logKey) ?? [];
+    
+    final newLog = BackupLog(
+      date: DateTime.now().toIso8601String(),
+      type: type,
+      details: details,
+    );
+    
+    logs.insert(0, jsonEncode(newLog.toJson())); // Add to top
+    if (logs.length > 50) logs = logs.sublist(0, 50); // Keep last 50
+    
+    await prefs.setStringList(_logKey, logs);
+  }
+
+  static Future<List<BackupLog>> getLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final logs = prefs.getStringList(_logKey) ?? [];
+    return logs.map((l) => BackupLog.fromJson(jsonDecode(l))).toList();
+  }
+
   /// Requests storage permissions for Android.
   static Future<bool> requestStoragePermission() async {
     if (!Platform.isAndroid) return true;
@@ -119,6 +161,12 @@ class BackupService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('stock_entries_data', jsonEncode(stockEntries.map((e) => e.toJson()).toList()));
     
+    final now = DateTime.now();
+    final dateStr = "${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}";
+    await prefs.setString('widget_backup_date', dateStr);
+    
+    await _logEvent('Backup', 'Successfully backed up $totalToProcess measurement sheets and updated database.json.');
+    
     onProgress(1.0);
   }
   
@@ -192,10 +240,37 @@ class BackupService {
         }
       }
       
+      await _logEvent('Load', 'Successfully restored data from database.json.');
+      
       return true;
     } catch (e) {
       debugPrint('Restore failed: $e');
       return false;
+    }
+  }
+
+  /// Silently updates the database.json in the backup folder to ensure data is never lost, 
+  /// even on app uninstall. Call this after data modifications.
+  static Future<void> silentDatabaseSync() async {
+    try {
+      final backupDir = await getBackupDirectory();
+      if (backupDir == null) return;
+      
+      final history = await StorageService.loadHistory();
+      final stockEntries = await StockStorageService.loadStockEntries();
+      final blockNames = await StockStorageService.loadBlockNames();
+      
+      final dbMap = {
+        'history': history.map((e) => e.toJson()).toList(),
+        'stockEntries': stockEntries.map((e) => e.toJson()).toList(),
+        'blockNames': blockNames,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      final dbFile = File('${backupDir.path}/database.json');
+      await dbFile.writeAsString(jsonEncode(dbMap));
+    } catch (e) {
+      debugPrint('Silent backup failed: $e');
     }
   }
 }

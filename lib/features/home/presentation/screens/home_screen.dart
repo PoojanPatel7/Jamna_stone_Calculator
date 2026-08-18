@@ -32,6 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
   double _totalAreaSaved = 0.0;
   
   List<StockEntry> _stockEntries = [];
+  Map<String, double> _consumedAreaMap = {};
+  Map<String, int> _consumedSlabsMap = {};
   bool _isLoading = true;
 
   @override
@@ -54,15 +56,47 @@ class _HomeScreenState extends State<HomeScreen> {
     // Load History Stats
     final history = await StorageService.loadHistory();
     double area = 0.0;
+    _consumedAreaMap.clear();
+    _consumedSlabsMap.clear();
+
     for (var book in history) {
       for (var slab in book.slabs) {
         area += slab.getArea(book.unit);
+      }
+      
+      if (book.linkedStockId != null) {
+        double bookArea = book.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(book.unit));
+        int bookSlabs = book.slabs.where((s) => s.length > 0 || s.width > 0).fold(0, (sum, slab) => sum + slab.quantity);
+        
+        _consumedAreaMap[book.linkedStockId!] = (_consumedAreaMap[book.linkedStockId!] ?? 0.0) + bookArea;
+        _consumedSlabsMap[book.linkedStockId!] = (_consumedSlabsMap[book.linkedStockId!] ?? 0) + bookSlabs;
       }
     }
     
     // Load Stock Stats
     final stock = await StockStorageService.loadStockEntries();
     
+    // Calculate for widgets
+    int marbleSlabs = 0;
+    int graniteSlabs = 0;
+    for (var entry in stock) {
+      final consumedSlabs = _consumedSlabsMap[entry.id] ?? 0;
+      final remainingSlabs = (entry.totalSlabCount - consumedSlabs).clamp(0, double.infinity).toInt();
+      if (entry.blockTypeName == 'Marble') {
+        marbleSlabs += remainingSlabs;
+      } else if (entry.blockTypeName == 'Granite') {
+        graniteSlabs += remainingSlabs;
+      }
+    }
+    
+    String recentBook = "No recent book";
+    if (history.isNotEmpty) {
+      history.sort((a, b) => b.date.compareTo(a.date));
+      recentBook = history.first.name.isNotEmpty ? history.first.name : "Unnamed";
+    }
+
+    // Widget sync removed
+
     if (mounted) {
       setState(() {
         _totalBooks = history.length;
@@ -731,12 +765,17 @@ class _HomeScreenState extends State<HomeScreen> {
     double graniteArea = 0.0;
 
     for (var entry in _stockEntries) {
+      final consumedSlabs = _consumedSlabsMap[entry.id] ?? 0;
+      final consumedArea = _consumedAreaMap[entry.id] ?? 0.0;
+      final remainingSlabs = (entry.totalSlabCount - consumedSlabs).clamp(0, double.infinity).toInt();
+      final remainingArea = (entry.estimatedArea - consumedArea).clamp(0.0, double.infinity).toDouble();
+
       if (entry.blockTypeName == 'Marble') {
-        marbleSlabs += entry.totalSlabCount;
-        marbleArea += entry.estimatedArea;
+        marbleSlabs += remainingSlabs;
+        marbleArea += remainingArea;
       } else if (entry.blockTypeName == 'Granite') {
-        graniteSlabs += entry.totalSlabCount;
-        graniteArea += entry.estimatedArea;
+        graniteSlabs += remainingSlabs;
+        graniteArea += remainingArea;
       }
     }
 

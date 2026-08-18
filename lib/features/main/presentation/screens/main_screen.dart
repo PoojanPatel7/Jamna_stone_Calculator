@@ -21,6 +21,7 @@ class _MainScreenState extends State<MainScreen> {
   SlabBook? _activeBook;
   UniqueKey _measurementKey = UniqueKey(); // Used to force reload when changing books
   UniqueKey _historyKey = UniqueKey(); // Force reload when switching to history tab
+  UniqueKey _settingsKey = UniqueKey();
 
   @override
   void initState() {
@@ -35,6 +36,8 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       if (index == 2) {
         _historyKey = UniqueKey();
+      } else if (index == 4) {
+        _settingsKey = UniqueKey();
       }
       _currentIndex = index;
     });
@@ -95,7 +98,7 @@ class _MainScreenState extends State<MainScreen> {
             StockScreen(
               isActive: _currentIndex == 3,
             ),
-            const SettingsScreen(),
+            SettingsScreen(key: _settingsKey),
           ],
         ),
         bottomNavigationBar: SafeArea(

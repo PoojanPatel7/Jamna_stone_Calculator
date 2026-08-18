@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models/slab_models.dart';
+import 'backup_service.dart';
 
 class StorageService {
   static const String _draftKey = 'current_draft';
@@ -60,6 +61,9 @@ class StorageService {
     final tempFile = File('${file.path}.tmp');
     await tempFile.writeAsString(jsonString, flush: true);
     await tempFile.rename(file.path);
+
+    // Silently sync to external public backup directory so data is preserved if the app is uninstalled
+    BackupService.silentDatabaseSync();
   }
 
   static Future<void> saveBook(SlabBook book) async {
@@ -129,5 +133,10 @@ class StorageService {
     final history = await loadHistory();
     history.removeWhere((b) => b.id == id);
     await writeHistory(history);
+  }
+
+  static Future<List<SlabBook>> getBooksForStockId(String stockId) async {
+    final history = await loadHistory();
+    return history.where((b) => b.linkedStockId == stockId).toList();
   }
 }

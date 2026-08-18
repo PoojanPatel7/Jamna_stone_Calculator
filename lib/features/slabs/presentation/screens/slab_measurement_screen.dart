@@ -12,6 +12,8 @@ import 'dart:typed_data';
 import '../../data/models/slab_models.dart';
 import '../../services/storage_service.dart';
 import 'history_screen.dart';
+import '../../../stock/data/models/stock_models.dart';
+import '../../../stock/services/stock_storage_service.dart';
 import '../../../../main.dart'; // For themeNotifier
 import '../../../../core/localization/app_translations.dart';
 
@@ -43,6 +45,8 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   String _partyName = '';
   String _numberPlate = '';
   DateTime _bookDate = DateTime.now();
+  String? _linkedStockId;
+  String? _linkedBlockDisplay;
   
   final List<String> _units = ['Feet', 'Inches', 'Cm', 'Meter'];
   
@@ -67,6 +71,8 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       _numberPlate = widget.loadedBook!.numberPlate ?? '';
       _bookDate = widget.loadedBook!.date;
       _currentUnit = widget.loadedBook!.unit;
+      _linkedStockId = widget.loadedBook!.linkedStockId;
+      _linkedBlockDisplay = widget.loadedBook!.linkedBlockDisplay;
       
       List<SlabEntry> expanded = [];
       for (var s in widget.loadedBook!.slabs) {
@@ -80,9 +86,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       }
       _slabs = expanded;
       
-      if (_slabs.length < 200) {
-        for (int i = _slabs.length; i < 200; i++) {
-          _slabs.add(SlabEntry(slabNo: i + 1));
+      if (_linkedStockId == null) {
+        if (_slabs.length < 200) {
+          for (int i = _slabs.length; i < 200; i++) {
+            _slabs.add(SlabEntry(slabNo: i + 1));
+          }
         }
       }
       _recalculateSlabNumbers();
@@ -98,11 +106,28 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       graniteName: _graniteName.trim().isEmpty ? null : _graniteName.trim(),
       partyName: _partyName.trim().isEmpty ? null : _partyName.trim(),
       numberPlate: _numberPlate.trim().isEmpty ? null : _numberPlate.trim(),
+      linkedStockId: _linkedStockId,
+      linkedBlockDisplay: _linkedBlockDisplay,
       date: _bookDate,
       unit: _currentUnit,
       slabs: _slabs,
     );
     StorageService.saveBook(book);
+    
+    // Update stock sold status if linked to a stock block
+    if (_linkedStockId != null) {
+      _updateLinkedStockStatus();
+    }
+  }
+
+  Future<void> _updateLinkedStockStatus() async {
+    if (_linkedStockId == null) return;
+    final books = await StorageService.getBooksForStockId(_linkedStockId!);
+    double totalBookArea = 0;
+    for (var b in books) {
+      totalBookArea += b.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(b.unit));
+    }
+    await StockStorageService.updateStockSoldStatus(_linkedStockId!, totalBookArea);
   }
 
   void _recalculateSlabNumbers() {
@@ -157,6 +182,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
   }
 
   void _checkAndAutoAddRows(int index, SlabEntry slab) {
+    if (_linkedStockId != null) return; // Do not auto add rows if linked to stock
     if (index == _slabs.length - 1 && (slab.length > 0 || slab.width > 0)) {
       for (int i = 0; i < 100; i++) {
         _slabs.add(SlabEntry(slabNo: _slabs.length + 1));
@@ -223,123 +249,287 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     final partyController = TextEditingController();
     final plateController = TextEditingController();
     DateTime tempDate = DateTime.now();
+    List<StockEntry> availableStocks = [];
+    Map<String, int> stockConsumedSlabs = {};
+    Map<String, double> stockConsumedArea = {};
+    StockEntry? selectedStock;
+    bool stocksLoaded = false;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StatefulBuilder(builder: (context, setLocalState) {
+      if (!stocksLoaded) {
+        stocksLoaded = true;
+        Future.wait([
+          StockStorageService.loadStockEntries(),
+          StorageService.loadHistory(),
+        ]).then((results) {
+          final allStocks = results[0] as List<StockEntry>;
+          final history = results[1] as List<SlabBook>;
+          
+          Map<String, int> consumedSlabsMap = {};
+          Map<String, double> consumedAreaMap = {};
+          
+          for (var book in history) {
+            if (book.linkedStockId != null) {
+              double area = book.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(book.unit));
+              int slabs = book.slabs.where((s) => s.length > 0 || s.width > 0).fold(0, (sum, slab) => sum + slab.quantity);
+              
+              consumedAreaMap[book.linkedStockId!] = (consumedAreaMap[book.linkedStockId!] ?? 0.0) + area;
+              consumedSlabsMap[book.linkedStockId!] = (consumedSlabsMap[book.linkedStockId!] ?? 0) + slabs;
+            }
+          }
+          
+          final filtered = allStocks.where((entry) {
+            final consumedSlabs = consumedSlabsMap[entry.id] ?? 0;
+            return (entry.totalSlabCount - consumedSlabs) > 0;
+          }).toList();
+          
+          setLocalState(() {
+            availableStocks = filtered;
+            stockConsumedSlabs = consumedSlabsMap;
+            stockConsumedArea = consumedAreaMap;
+          });
+        });
+      }
+
       return Scaffold(
-        appBar: AppBar(title: Text('new_book'.tr), centerTitle: true),
-        body: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('create_start'.tr, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: graniteController,
-                      decoration: InputDecoration(
-                        labelText: 'granite_name'.tr,
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.landscape),
-                      ),
+        appBar: AppBar(
+          title: Text('new_book'.tr, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+          centerTitle: true,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 500),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05)),
+                boxShadow: [
+                  if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 16, offset: const Offset(0, 8)),
+                ],
+              ),
+              padding: const EdgeInsets.all(28.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('create_start'.tr, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87, letterSpacing: -0.5), textAlign: TextAlign.center),
+                  const SizedBox(height: 8),
+                  Text('Fill in the details below to start measuring slabs.', style: TextStyle(fontSize: 13, color: isDark ? Colors.white54 : Colors.black54), textAlign: TextAlign.center),
+                  const SizedBox(height: 32),
+                  _buildPremiumTextField(controller: graniteController, label: 'granite_name'.tr, icon: Icons.landscape_rounded, isDark: isDark),
+                  const SizedBox(height: 16),
+                  _buildPremiumTextField(controller: partyController, label: 'party_name'.tr, icon: Icons.business_rounded, isDark: isDark),
+                  const SizedBox(height: 16),
+                  _buildPremiumTextField(controller: plateController, label: 'number_plate'.tr, icon: Icons.local_shipping_rounded, isDark: isDark),
+                  const SizedBox(height: 24),
+                  
+                  const Divider(),
+                  const SizedBox(height: 20),
+                  Text('Stock Linkage (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black54)),
+                  const SizedBox(height: 12),
+                  
+                  DropdownButtonFormField<String?>(
+                    value: selectedStock?.id,
+                    decoration: InputDecoration(
+                      labelText: 'Select Available Stock Block',
+                      labelStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF8F9FA),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      prefixIcon: Icon(Icons.inventory_2_rounded, color: isDark ? Colors.blueAccent : Colors.blue.shade700),
                     ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: partyController,
-                      decoration: InputDecoration(
-                        labelText: 'party_name'.tr,
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.person),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('None (No stock link)', style: TextStyle(fontWeight: FontWeight.w600)),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: plateController,
-                      decoration: InputDecoration(
-                        labelText: 'number_plate'.tr,
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.directions_car),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      title: Text('date'.tr),
-                      subtitle: Text('${tempDate.day}/${tempDate.month}/${tempDate.year}'),
-                      leading: const Icon(Icons.calendar_today),
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: tempDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
+                      ...availableStocks.map((stock) {
+                        final remaining = stock.totalSlabCount - (stockConsumedSlabs[stock.id] ?? 0);
+                        final label = '${stock.blockName} (#${stock.blockNumber}) - $remaining slabs left';
+                        return DropdownMenuItem<String?>(
+                          value: stock.id,
+                          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
                         );
-                        if (picked != null) {
-                          setLocalState(() => tempDate = picked);
+                      }),
+                    ],
+                    onChanged: (val) {
+                      setLocalState(() {
+                        if (val == null) {
+                          selectedStock = null;
+                        } else {
+                          selectedStock = availableStocks.firstWhere((s) => s.id == val);
                         }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _currentUnit,
-                      decoration: InputDecoration(
-                        labelText: 'unit'.tr,
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.straighten),
+                      });
+                    },
+                    isExpanded: true,
+                    dropdownColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+                  ),
+                  if (selectedStock != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.blue.withOpacity(0.1) : Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isDark ? Colors.blue.withOpacity(0.3) : Colors.blue.shade200),
                       ),
-                      items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setLocalState(() {
-                            _currentUnit = val;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 32),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.all(16),
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 20, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade700),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Left in Stock: ${selectedStock!.totalSlabCount - (stockConsumedSlabs[selectedStock!.id] ?? 0)} slabs',
+                                  style: TextStyle(fontSize: 13, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade800, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Measurement sheet will be created with exactly ${selectedStock!.totalSlabCount - (stockConsumedSlabs[selectedStock!.id] ?? 0)} rows.',
+                                  style: TextStyle(fontSize: 11, color: isDark ? Colors.lightBlueAccent.withOpacity(0.7) : Colors.blue.shade800.withOpacity(0.8)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      onPressed: () {
-                        if (graniteController.text.trim().isEmpty || partyController.text.trim().isEmpty || plateController.text.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
-                          return;
-                        }
-                        setState(() {
-                          _bookId = DateTime.now().millisecondsSinceEpoch.toString();
-                          _graniteName = graniteController.text.trim();
-                          _partyName = partyController.text.trim();
-                          _numberPlate = plateController.text.trim();
-                          _bookName = '$_partyName - $_graniteName';
-                          _bookDate = tempDate;
-                          _slabs = List.generate(200, (i) => SlabEntry(slabNo: i + 1));
-                          _recalculateSlabNumbers();
-                          _saveBookLive();
-                        });
-                      },
-                      child: Text('create_start'.tr, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 20),
+                  
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: tempDate,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (picked != null) setLocalState(() => tempDate = picked);
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF8F9FA),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today_rounded, size: 20, color: isDark ? Colors.white54 : Colors.black54),
+                                const SizedBox(width: 12),
+                                Expanded(child: Text('${tempDate.day}/${tempDate.month}/${tempDate.year}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: _currentUnit,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF8F9FA),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                          ),
+                          items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)))).toList(),
+                          onChanged: (val) {
+                            if (val != null) setLocalState(() => _currentUnit = val);
+                          },
+                          dropdownColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () {
+                      if (graniteController.text.trim().isEmpty || partyController.text.trim().isEmpty || plateController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+                        return;
+                      }
+                      setState(() {
+                        _bookId = DateTime.now().millisecondsSinceEpoch.toString();
+                        _graniteName = graniteController.text.trim();
+                        _partyName = partyController.text.trim();
+                        _numberPlate = plateController.text.trim();
+                        _bookName = '$_partyName - $_graniteName';
+                        _bookDate = tempDate;
+                        
+                        int rowCount = 200; // default to 200 for unlinked
+                        if (selectedStock != null) {
+                          _linkedStockId = selectedStock!.id;
+                          _linkedBlockDisplay = '${selectedStock!.blockName} (#${selectedStock!.blockNumber})';
+                          rowCount = selectedStock!.totalSlabCount - (stockConsumedSlabs[selectedStock!.id] ?? 0);
+                          if (rowCount <= 0) rowCount = 200; // fallback if somehow 0
+                        } else {
+                          _linkedStockId = null;
+                          _linkedBlockDisplay = null;
+                        }
+                        
+                        _slabs = List.generate(rowCount, (i) => SlabEntry(slabNo: i + 1));
+                        _recalculateSlabNumbers();
+                        _saveBookLive();
+                      });
+                    },
+                    child: Text('create_start'.tr, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                  ),
+                ],
+              ),
               ),
             ),
           ),
         ),
       );
     });
+  }
+
+  Widget _buildPremiumTextField({required TextEditingController controller, required String label, required IconData icon, required bool isDark}) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF8F9FA),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        prefixIcon: Icon(icon, color: isDark ? Colors.white54 : Colors.black45),
+      ),
+      style: const TextStyle(fontWeight: FontWeight.w600),
+    );
   }
 
   @override
@@ -430,7 +620,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           _buildTopSummary(),
           Expanded(
             child: _isTableView ? _buildTableView() : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 80), 
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100), 
               itemCount: _slabs.length,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
@@ -444,10 +634,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     );
   }
 
+  bool _isSummaryExpanded = false;
+
   Widget _buildTopSummary() {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: isLandscape ? 4 : 12),
       margin: EdgeInsets.fromLTRB(16, 8, 16, isLandscape ? 4 : 12),
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
@@ -460,31 +651,17 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_bookId != null) ...[
-            Text(_bookName, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text('Party: ${_partyName.isNotEmpty ? _partyName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
-                Expanded(child: Text('Granite: ${_graniteName.isNotEmpty ? _graniteName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text('Date: ${_bookDate.day}/${_bookDate.month}/${_bookDate.year}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
-                if (_numberPlate.isNotEmpty)
-                  Expanded(child: Text('Plate: $_numberPlate', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-              ],
-            ),
-            const Divider(color: Colors.black26),
-            const SizedBox(height: 4),
-          ],
-          Row(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: _isSummaryExpanded,
+          onExpansionChanged: (expanded) {
+            setState(() {
+              _isSummaryExpanded = expanded;
+            });
+          },
+          tilePadding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
@@ -522,52 +699,115 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
               ),
             ],
           ),
-        ],
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_bookId != null) ...[
+                    const Divider(color: Colors.black26),
+                    const SizedBox(height: 4),
+                    Text(_bookName, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text('Party: ${_partyName.isNotEmpty ? _partyName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
+                        Expanded(child: Text('Granite: ${_graniteName.isNotEmpty ? _graniteName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text('Date: ${_bookDate.day}/${_bookDate.month}/${_bookDate.year}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
+                        if (_numberPlate.isNotEmpty)
+                          Expanded(child: Text('Plate: $_numberPlate', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      ],
+                    ),
+                    if (_linkedBlockDisplay != null && _linkedBlockDisplay!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.link_rounded, size: 16, color: Colors.black54),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Linked Block: $_linkedBlockDisplay',
+                                style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildTableView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
         Container(
-          color: AppColors.primary.withOpacity(0.2),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: const Row(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
+            border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade300, width: 1.5)),
+          ),
+          child: Row(
             children: [
-              Expanded(flex: 2, child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-              SizedBox(width: 2),
-              Expanded(flex: 3, child: Text('L', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-              SizedBox(width: 2),
-              Expanded(flex: 3, child: Text('W', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-              SizedBox(width: 2),
-              Expanded(flex: 3, child: Text('Area', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-              SizedBox(width: 2),
-              Expanded(flex: 3, child: Text('Act.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Text('No.', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87), textAlign: TextAlign.center)),
+              const SizedBox(width: 4),
+              Expanded(flex: 3, child: Text('Length', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87), textAlign: TextAlign.center)),
+              const SizedBox(width: 4),
+              Expanded(flex: 3, child: Text('Width', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87), textAlign: TextAlign.center)),
+              const SizedBox(width: 4),
+              Expanded(flex: 3, child: Text('Area', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87), textAlign: TextAlign.center)),
+              const SizedBox(width: 4),
+              Expanded(flex: 3, child: Text('Actions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87), textAlign: TextAlign.center)),
             ],
           ),
         ),
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 100),
             itemCount: _slabs.length,
-            separatorBuilder: (c, i) => Divider(height: 1, color: Theme.of(context).dividerColor.withOpacity(0.5)),
             itemBuilder: (context, index) {
               SlabEntry slab = _slabs[index];
+              final isEven = index % 2 == 0;
+              final rowBgColor = isDark
+                  ? (isEven ? const Color(0xFF121212) : const Color(0xFF1A1A1A))
+                  : (isEven ? Colors.white : Colors.grey.shade50);
+
               return Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                color: rowBgColor,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 child: Row(
                   children: [
                     Expanded(
                       flex: 2, 
-                      child: Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)
+                      child: Text('${index + 1}', style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? Colors.white70 : Colors.black54), textAlign: TextAlign.center)
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Expanded(
                       flex: 3,
                       child: _NumberInputField(
                         key: ValueKey('$_formSessionId-$index-length'),
                         label: 'L',
+                        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
                         value: slab.length == 0 ? '' : slab.length.toString(),
                         onChanged: (val) {
                             _saveStateForUndo();
@@ -578,12 +818,13 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Expanded(
                       flex: 3,
                       child: _NumberInputField(
                         key: ValueKey('$_formSessionId-$index-width'),
                         label: 'W',
+                        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
                         value: slab.width == 0 ? '' : slab.width.toString(),
                         onChanged: (val) {
                             _saveStateForUndo();
@@ -594,46 +835,48 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Expanded(
                       flex: 3,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).dividerColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4)
+                          color: isDark ? Colors.blue.withOpacity(0.1) : Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade100),
                         ),
                         child: Text(
                           slab.getArea(_currentUnit).toStringAsFixed(2),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade800),
                           textAlign: TextAlign.center,
                         ),
                       )
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Expanded(
                       flex: 3,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           Flexible(
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              iconSize: 20,
-                              tooltip: 'Copy from above row',
-                              icon: const Icon(Icons.arrow_downward_rounded, color: Colors.blueAccent),
-                              onPressed: index > 0 ? () => _copyPreviousRow(index) : null,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: index > 0 ? () => _copyPreviousRow(index) : null,
+                              child: Padding(
+                                padding: const EdgeInsets.all(6.0),
+                                child: Icon(Icons.arrow_downward_rounded, size: 20, color: index > 0 ? (isDark ? Colors.blueAccent : Colors.blue.shade600) : Colors.grey),
+                              ),
                             ),
                           ),
                           Flexible(
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              iconSize: 20,
-                              tooltip: 'Clear row',
-                              icon: const Icon(Icons.clear_rounded, color: Colors.redAccent),
-                              onPressed: () => _clearRow(index),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => _clearRow(index),
+                              child: const Padding(
+                                padding: EdgeInsets.all(6.0),
+                                child: Icon(Icons.clear_rounded, size: 20, color: Colors.redAccent),
+                              ),
                             ),
                           ),
                         ],
@@ -654,35 +897,63 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade200),
+        boxShadow: [
+          if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Slab ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blue.withOpacity(0.15) : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Slab ${index + 1}', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade700)),
+              ),
               Row(
                 children: [
-                  IconButton(
-                    tooltip: 'Copy from above',
-                    icon: const Icon(Icons.arrow_downward_rounded, color: Colors.blueAccent),
-                    onPressed: index > 0 ? () => _copyPreviousRow(index) : null,
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      tooltip: 'Copy from above',
+                      icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                      color: isDark ? Colors.blueAccent : Colors.blue.shade600,
+                      onPressed: index > 0 ? () => _copyPreviousRow(index) : null,
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Clear',
-                    icon: const Icon(Icons.clear_rounded, color: Colors.redAccent),
-                    onPressed: () => _clearRow(index),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.red.withOpacity(0.1) : Colors.red.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      tooltip: 'Clear row',
+                      icon: const Icon(Icons.clear_rounded, size: 18),
+                      color: Colors.redAccent,
+                      onPressed: () => _clearRow(index),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 ],
               )
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -691,6 +962,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                   label: 'Length',
                   prefixIcon: Icons.straighten_rounded,
                   iconColor: Colors.green,
+                  fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade50,
                   value: slab.length == 0 ? '' : slab.length.toString(),
                   onChanged: (val) {
                     _saveStateForUndo();
@@ -700,13 +972,14 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: _NumberInputField(
                   key: ValueKey('$_formSessionId-$index-width'),
                   label: 'Width',
                   prefixIcon: Icons.height_rounded,
                   iconColor: Colors.orange,
+                  fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade50,
                   value: slab.width == 0 ? '' : slab.width.toString(),
                   onChanged: (val) {
                     _saveStateForUndo();
@@ -1065,6 +1338,7 @@ class _NumberInputField extends StatefulWidget {
   final Function(String) onChanged;
   final IconData? prefixIcon;
   final Color? iconColor;
+  final Color? fillColor;
   final bool showPlusMinus;
 
   const _NumberInputField({
@@ -1074,6 +1348,7 @@ class _NumberInputField extends StatefulWidget {
     required this.onChanged,
     this.prefixIcon,
     this.iconColor,
+    this.fillColor,
     this.showPlusMinus = false,
   }) : super(key: key);
 
@@ -1127,7 +1402,7 @@ class _NumberInputFieldState extends State<_NumberInputField> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         isDense: true,
         filled: true,
-        fillColor: Theme.of(context).scaffoldBackgroundColor,
+        fillColor: widget.fillColor ?? Theme.of(context).scaffoldBackgroundColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),

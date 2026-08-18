@@ -19,6 +19,7 @@ class _AddStockScreenState extends State<AddStockScreen> {
   
   final _slabCountController = TextEditingController();
   final _areaController = TextEditingController();
+  final _blockNumberController = TextEditingController();
   
   bool _isPolished = true;
   DateTime _selectedDate = DateTime.now();
@@ -33,15 +34,16 @@ class _AddStockScreenState extends State<AddStockScreen> {
     if (widget.entryToEdit != null) {
       _selectedBlockType = widget.entryToEdit!.blockTypeName;
       _selectedBlockName = widget.entryToEdit!.blockName;
+      _blockNumberController.text = widget.entryToEdit!.blockNumber;
       _isPolished = widget.entryToEdit!.isPolished;
       _slabCountController.text = widget.entryToEdit!.totalSlabCount.toString();
       _areaController.text = widget.entryToEdit!.estimatedArea.toString();
       _selectedDate = widget.entryToEdit!.date;
     }
-    _loadBlockNames();
+    _loadData();
   }
   
-  Future<void> _loadBlockNames() async {
+  Future<void> _loadData() async {
     final names = await StockStorageService.loadBlockNames();
     setState(() {
       _blockNames = names;
@@ -53,21 +55,9 @@ class _AddStockScreenState extends State<AddStockScreen> {
       }
     });
   }
-  
-  Future<void> _selectDate(BuildContext context) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
 
+
+  
   void _showAddBlockNameDialog() {
     final nameController = TextEditingController();
     showDialog(
@@ -92,7 +82,7 @@ class _AddStockScreenState extends State<AddStockScreen> {
                 final name = nameController.text.trim();
                 if (name.isNotEmpty) {
                   await StockStorageService.saveBlockName(name);
-                  await _loadBlockNames();
+                  await _loadData();
                   setState(() {
                     _selectedBlockName = name;
                   });
@@ -107,6 +97,20 @@ class _AddStockScreenState extends State<AddStockScreen> {
     );
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   void _saveStock() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedBlockName == null || _selectedBlockName!.isEmpty) {
@@ -116,15 +120,18 @@ class _AddStockScreenState extends State<AddStockScreen> {
         return;
       }
       
+
       final stockEntry = StockEntry(
         id: widget.entryToEdit?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         blockName: _selectedBlockName!,
+        blockNumber: _blockNumberController.text.trim(),
         isPolished: _isPolished,
         totalSlabCount: int.tryParse(_slabCountController.text) ?? 0,
         estimatedArea: double.tryParse(_areaController.text) ?? 0.0,
         date: _selectedDate,
         blockTypeId: _selectedBlockType,
         blockTypeName: _selectedBlockType,
+        isSold: widget.entryToEdit?.isSold ?? false,
       );
       
       await StockStorageService.saveStockEntry(stockEntry);
@@ -146,17 +153,15 @@ class _AddStockScreenState extends State<AddStockScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Block Type Segmented Control
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Block Type', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 12),
+                      const Text('Block Type', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
                       Row(
                         children: [
                           Expanded(
@@ -185,23 +190,35 @@ class _AddStockScreenState extends State<AddStockScreen> {
               ).animate().fade().slideY(begin: 0.1, duration: 400.ms),
               const SizedBox(height: 16),
               
+              TextFormField(
+                controller: _blockNumberController,
+                maxLength: 25,
+                decoration: InputDecoration(
+                  labelText: 'Block Number',
+                  prefixIcon: const Icon(Icons.tag),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Theme.of(context).cardColor,
+                ),
+                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+              ).animate().fade().slideY(begin: 0.1, delay: 50.ms, duration: 400.ms),
+              const SizedBox(height: 16),
+              
               // Block Name Selection with + Button
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      value: _blockNames.contains(_selectedBlockName) ? _selectedBlockName : null,
                       decoration: InputDecoration(
                         labelText: 'Block Name',
+                        prefixIcon: const Icon(Icons.inventory_2),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         filled: true,
                         fillColor: Theme.of(context).cardColor,
                       ),
-                      value: _selectedBlockName,
                       items: _blockNames.map((name) {
-                        return DropdownMenuItem(
-                          value: name,
-                          child: Text(name),
-                        );
+                        return DropdownMenuItem(value: name, child: Text(name));
                       }).toList(),
                       onChanged: (val) {
                         setState(() {
@@ -211,19 +228,12 @@ class _AddStockScreenState extends State<AddStockScreen> {
                       validator: (val) => val == null ? 'Required' : null,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  InkWell(
-                    onTap: _showAddBlockNameDialog,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Theme.of(context).primaryColor),
-                      ),
-                      child: Icon(Icons.add, color: Theme.of(context).primaryColor, size: 28),
-                    ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _showAddBlockNameDialog,
+                    icon: const Icon(Icons.add_circle),
+                    color: Colors.blue,
+                    iconSize: 36,
                   ),
                 ],
               ).animate().fade().slideY(begin: 0.1, delay: 100.ms, duration: 400.ms),
@@ -318,4 +328,3 @@ class _AddStockScreenState extends State<AddStockScreen> {
     );
   }
 }
-

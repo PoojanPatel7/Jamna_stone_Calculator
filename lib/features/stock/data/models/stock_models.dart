@@ -20,6 +20,7 @@ class BlockType {
 
 class StockEntry {
   String id;
+  String blockNumber;
   String blockName;
   bool isPolished; // true for polished, false for unpolished
   int totalSlabCount;
@@ -27,10 +28,12 @@ class StockEntry {
   DateTime date;
   String blockTypeId;
   String blockTypeName; // Cache the name for easy display
+  bool isSold;
   bool isSynced;
 
   StockEntry({
     required this.id,
+    required this.blockNumber,
     required this.blockName,
     required this.isPolished,
     required this.totalSlabCount,
@@ -38,11 +41,13 @@ class StockEntry {
     required this.date,
     required this.blockTypeId,
     required this.blockTypeName,
+    this.isSold = false,
     this.isSynced = false,
   });
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'blockNumber': blockNumber,
     'blockName': blockName,
     'isPolished': isPolished,
     'totalSlabCount': totalSlabCount,
@@ -50,11 +55,13 @@ class StockEntry {
     'date': date.toIso8601String(),
     'blockTypeId': blockTypeId,
     'blockTypeName': blockTypeName,
+    'isSold': isSold,
     'isSynced': isSynced,
   };
 
   factory StockEntry.fromJson(Map<String, dynamic> json) => StockEntry(
     id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    blockNumber: json['blockNumber'] ?? '',
     blockName: json['blockName'] ?? 'Unknown Block',
     isPolished: json['isPolished'] ?? false,
     totalSlabCount: json['totalSlabCount'] ?? 0,
@@ -62,6 +69,7 @@ class StockEntry {
     date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
     blockTypeId: json['blockTypeId'] ?? '',
     blockTypeName: json['blockTypeName'] ?? 'Unknown Type',
+    isSold: json['isSold'] ?? false,
     isSynced: json['isSynced'] ?? false,
   );
 }

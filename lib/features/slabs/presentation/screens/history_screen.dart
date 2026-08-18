@@ -9,6 +9,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../../services/backup_service.dart';
 import '../../../../core/utils/pdf_generator.dart';
+import '../../../stock/data/models/stock_models.dart';
+import '../../../stock/services/stock_storage_service.dart';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -52,47 +54,115 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _editBookDetails(SlabBook book) {
     final nameController = TextEditingController(text: book.name);
+    final partyController = TextEditingController(text: book.partyName ?? '');
+    final graniteController = TextEditingController(text: book.graniteName ?? '');
     final plateController = TextEditingController(text: book.numberPlate ?? '');
+    DateTime selectedDate = book.date;
+
     return showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Book Details'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Book Name'),
-                maxLines: null,
-                autofocus: true,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Edit Book Details'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Book Name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: partyController,
+                      decoration: const InputDecoration(labelText: 'Party Name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: graniteController,
+                      decoration: const InputDecoration(labelText: 'Granite/Marble Name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: plateController,
+                      decoration: const InputDecoration(labelText: 'Number Plate (Optional)'),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Date', style: TextStyle(fontSize: 14)),
+                      subtitle: Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                      trailing: const Icon(Icons.calendar_today_rounded),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (picked != null) {
+                          setState(() => selectedDate = picked);
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: plateController,
-                maxLines: null,
-                decoration: const InputDecoration(labelText: 'Number Plate (Optional)'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () async {
-                if (nameController.text.trim().isNotEmpty) {
-                  book.name = nameController.text.trim();
-                  book.numberPlate = plateController.text.trim().isEmpty ? null : plateController.text.trim();
-                  await StorageService.saveBook(book);
-                  _loadHistory();
-                }
-                Navigator.pop(context);
-              }, 
-              child: const Text('Save')
-            ),
-          ],
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(
+                  onPressed: () async {
+                    if (nameController.text.trim().isNotEmpty) {
+                      book.name = nameController.text.trim();
+                      book.partyName = partyController.text.trim().isEmpty ? null : partyController.text.trim();
+                      book.graniteName = graniteController.text.trim().isEmpty ? null : graniteController.text.trim();
+                      book.numberPlate = plateController.text.trim().isEmpty ? null : plateController.text.trim();
+                      book.date = selectedDate;
+                      await StorageService.saveBook(book);
+                      _loadHistory();
+                    }
+                    Navigator.pop(context);
+                  }, 
+                  child: const Text('Save')
+                ),
+              ],
+            );
+          }
         );
       }
     );
+  }
+
+  Future<void> _detachBlock(SlabBook book) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Detach Block?'),
+        content: const Text('This will unlink the block from this book and restore the consumed slabs back into your available stock. Do you want to continue?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('Detach')
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      book.linkedStockId = null;
+      book.linkedBlockDisplay = null;
+      await StorageService.saveBook(book);
+      _loadHistory();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Block detached and stock restored successfully!')),
+        );
+      }
+    }
   }
 
   Future<void> _deleteBookWithConfirmation(SlabBook book) async {
@@ -471,6 +541,381 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  Future<void> _showComparePopup(SlabBook book) async {
+    if (book.linkedStockId == null) return;
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final stockEntry = await StockStorageService.getStockEntry(book.linkedStockId!);
+    final linkedBooks = await StorageService.getBooksForStockId(book.linkedStockId!);
+    
+    if (mounted) Navigator.pop(context); // close loading
+
+    if (stockEntry == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stock block not found. It may have been deleted.')),
+        );
+      }
+      return;
+    }
+
+    // Calculate totals
+    int thisBookSlabs = book.slabs.where((s) => s.length > 0 || s.width > 0).fold(0, (sum, slab) => sum + slab.quantity);
+    double thisBookArea = book.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(book.unit));
+
+    int allBooksSlabs = 0;
+    double allBooksArea = 0;
+    for (var b in linkedBooks) {
+      allBooksSlabs += b.slabs.where((s) => s.length > 0 || s.width > 0).fold(0, (sum, slab) => sum + slab.quantity);
+      allBooksArea += b.slabs.fold(0.0, (sum, slab) => sum + slab.getArea(b.unit));
+    }
+
+    int remainingSlabs = stockEntry.totalSlabCount - allBooksSlabs;
+    double remainingArea = stockEntry.estimatedArea - allBooksArea;
+
+    if (!mounted) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            width: double.maxFinite,
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.lightBlueAccent, Colors.blue],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.compare_arrows_rounded, color: Colors.white, size: 28),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Stock vs Book', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+                              const SizedBox(height: 4),
+                              Text(
+                                book.linkedBlockDisplay ?? stockEntry.blockName,
+                                style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Original Stock
+                  _buildCompareSection(
+                    isDark: isDark,
+                    icon: Icons.inventory_2_rounded,
+                    title: 'Original Stock',
+                    color: Colors.blue,
+                    slabs: stockEntry.totalSlabCount,
+                    area: stockEntry.estimatedArea,
+                    subtitle: '${stockEntry.blockTypeName} • ${stockEntry.isPolished ? "Polished" : "Unpolished"}',
+                  ),
+                  const SizedBox(height: 12),
+
+                  // This Book
+                  _buildCompareSection(
+                    isDark: isDark,
+                    icon: Icons.description_rounded,
+                    title: 'This Book',
+                    color: Colors.orange,
+                    slabs: thisBookSlabs,
+                    area: thisBookArea,
+                    subtitle: book.name,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // All Books on this Block
+                  if (linkedBooks.length > 1) ...[
+                    _buildCompareSection(
+                      isDark: isDark,
+                      icon: Icons.library_books_rounded,
+                      title: 'All Books (${linkedBooks.length})',
+                      color: Colors.purple,
+                      slabs: allBooksSlabs,
+                      area: allBooksArea,
+                      subtitle: 'Total consumed from all linked books',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Remaining
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: remainingArea > 0
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: remainingArea > 0
+                            ? Colors.green.withOpacity(0.3)
+                            : Colors.red.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              remainingArea > 0 ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                              color: remainingArea > 0 ? Colors.green : Colors.red,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              remainingArea > 0 ? 'Remaining Stock' : 'Fully Sold',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: remainingArea > 0 ? Colors.green : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Text('Slabs', style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${remainingSlabs < 0 ? 0 : remainingSlabs}',
+                                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: remainingArea > 0 ? Colors.green : Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(width: 1, height: 30, color: isDark ? Colors.white12 : Colors.grey.shade200),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Text('Area', style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${(remainingArea < 0 ? 0 : remainingArea).toStringAsFixed(1)} SqFt',
+                                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: remainingArea > 0 ? Colors.green : Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompareSection({
+    required bool isDark,
+    required IconData icon,
+    required String title,
+    required Color color,
+    required int slabs,
+    required double area,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: color)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(subtitle, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey), overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('Slabs', style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.grey, fontWeight: FontWeight.bold)),
+                    Text('$slabs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.grey.shade200),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('Area', style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.grey, fontWeight: FontWeight.bold)),
+                    Text('${area.toStringAsFixed(1)} SqFt', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _markLinkedStockAsSold(SlabBook book) async {
+    if (book.linkedStockId == null) return;
+    
+    // Show confirmation dialog
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark Stock as Sold?'),
+        content: const Text('This will manually mark the linked stock block as fully sold, even if it has remaining area. Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Mark as Sold'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Marking stock as sold...')),
+      );
+    }
+    
+    await StockStorageService.forceMarkAsSold(book.linkedStockId!, true);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Stock marked as sold successfully')),
+      );
+    }
+  }
+
+  Future<void> _linkToStockBlock(SlabBook book) async {
+    final availableEntries = await StockStorageService.getAvailableStockEntries();
+    
+    if (availableEntries.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No available stock blocks to link.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    final selectedEntry = await showDialog<StockEntry>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Link to Stock Block'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: availableEntries.length,
+              itemBuilder: (context, index) {
+                final entry = availableEntries[index];
+                final display = entry.blockNumber.isNotEmpty
+                    ? '${entry.blockName} (#${entry.blockNumber}) - ${entry.blockTypeName}'
+                    : '${entry.blockName} - ${entry.blockTypeName}';
+                    
+                return ListTile(
+                  title: Text(display),
+                  subtitle: Text('${entry.totalSlabCount} slabs • ${entry.estimatedArea.toStringAsFixed(1)} sqft'),
+                  onTap: () => Navigator.pop(context, entry),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (selectedEntry != null) {
+      book.linkedStockId = selectedEntry.id;
+      book.linkedBlockDisplay = selectedEntry.blockNumber.isNotEmpty
+          ? '${selectedEntry.blockName} (#${selectedEntry.blockNumber})'
+          : selectedEntry.blockName;
+          
+      await StorageService.saveBook(book);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Linked successfully.')),
+        );
+      }
+      _loadHistory();
+    }
+  }
+
   Future<void> _shareBook(SlabBook book) async {
     final pdf = PdfGenerator.buildPdfDocumentForBook(book);
     final bytes = await pdf.save();
@@ -499,28 +944,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         title: Text('history'.tr),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.blue),
-            onSelected: (value) {
-              if (value == 'backup') {
-                _startBackup();
-              } else if (value == 'restore') {
-                _startRestore();
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'backup',
-                child: Row(children: [Icon(Icons.backup_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Backup Data')]),
-              ),
-              const PopupMenuItem(
-                value: 'restore',
-                child: Row(children: [Icon(Icons.restore_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Load Data')]),
-              ),
-            ],
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -623,12 +1046,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   _shareBook(book);
                                 } else if (value == 'delete') {
                                   _deleteBookWithConfirmation(book);
+                                } else if (value == 'mark_sold') {
+                                  _markLinkedStockAsSold(book);
+                                } else if (value == 'link_stock') {
+                                  _linkToStockBlock(book);
+                                } else if (value == 'detach_stock') {
+                                  _detachBlock(book);
                                 }
                               },
                               itemBuilder: (context) => [
                                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 20), SizedBox(width: 8), Text('Edit Details')])),
                                 const PopupMenuItem(value: 'share', child: Row(children: [Icon(Icons.share_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Share PDF')])),
                                 const PopupMenuItem(value: 'export', child: Row(children: [Icon(Icons.open_in_new_rounded, size: 20), SizedBox(width: 8), Text('Open & Export')])),
+                                if (book.linkedStockId != null) ...[
+                                  const PopupMenuItem(value: 'mark_sold', child: Row(children: [Icon(Icons.check_circle_outline_rounded, color: Colors.orange, size: 20), SizedBox(width: 8), Text('Mark Stock as Sold')])),
+                                  const PopupMenuItem(value: 'detach_stock', child: Row(children: [Icon(Icons.link_off_rounded, color: Colors.orange, size: 20), SizedBox(width: 8), Text('Detach Block')])),
+                                ],
+                                if (book.linkedStockId == null)
+                                  const PopupMenuItem(value: 'link_stock', child: Row(children: [Icon(Icons.link_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Link to Stock Block')])),
                                 const PopupMenuDivider(),
                                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_rounded, color: Colors.red, size: 20), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))])),
                               ],
@@ -698,7 +1133,58 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 ),
                             ],
                           )
-                        ]
+                        ],
+                        // Stock block link badge + Compare button
+                        if (book.linkedStockId != null) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.inventory_2_rounded, size: 14, color: Colors.orange),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          book.linkedBlockDisplay ?? 'Linked Block',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.orange),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Material(
+                                color: Colors.blue,
+                                borderRadius: BorderRadius.circular(8),
+                                child: InkWell(
+                                  onTap: () => _showComparePopup(book),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.compare_arrows_rounded, size: 14, color: Colors.white),
+                                        SizedBox(width: 4),
+                                        Text('Compare', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),

@@ -44,6 +44,8 @@ class SlabBook {
   String? graniteName;
   String? partyName;
   String? numberPlate;
+  String? linkedStockId;
+  String? linkedBlockDisplay;
   DateTime date;
   String unit;
   List<SlabEntry> slabs;
@@ -55,6 +57,8 @@ class SlabBook {
     this.graniteName,
     this.partyName,
     this.numberPlate,
+    this.linkedStockId,
+    this.linkedBlockDisplay,
     required this.date,
     required this.unit,
     required this.slabs,
@@ -67,6 +71,8 @@ class SlabBook {
     'graniteName': graniteName,
     'partyName': partyName,
     'numberPlate': numberPlate,
+    'linkedStockId': linkedStockId,
+    'linkedBlockDisplay': linkedBlockDisplay,
     'date': date.toIso8601String(),
     'unit': unit,
     'slabs': slabs.map((e) => e.toJson()).toList(),
@@ -79,6 +85,8 @@ class SlabBook {
     graniteName: json['graniteName'],
     partyName: json['partyName'],
     numberPlate: json['numberPlate'],
+    linkedStockId: json['linkedStockId'],
+    linkedBlockDisplay: json['linkedBlockDisplay'],
     date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
     unit: json['unit'] ?? 'Feet',
     slabs: (json['slabs'] as List?)?.map((e) => SlabEntry.fromJson(e as Map<String, dynamic>)).toList() ?? [],

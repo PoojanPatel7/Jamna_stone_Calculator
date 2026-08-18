@@ -6,8 +6,7 @@
     <application
         android:label="Jamna Stone"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon"
-        android:hasFragileUserData="true">
+        android:icon="@mipmap/launcher_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"

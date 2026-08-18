@@ -13,7 +13,7 @@
   <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.12-0175C2?logo=dart&logoColor=white" alt="Dart" /></a>
   <a href="https://github.com/PoojanPatel7/Jamna_stone_Calculator/releases"><img src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white" alt="Platform" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" /></a>
-  <a href="https://github.com/PoojanPatel7/Jamna_stone_Calculator/releases"><img src="https://img.shields.io/badge/Version-1.0.2-blue" alt="Version" /></a>
+  <a href="https://github.com/PoojanPatel7/Jamna_stone_Calculator/releases"><img src="https://img.shields.io/badge/Version-1.0.3-blue" alt="Version" /></a>
 </p>
 
 ---
@@ -26,9 +26,42 @@ Whether you're at the quarry, in the warehouse, or on-site with a client, Jamna 
 
 ---
 
-## 🆕 What's New in v1.0.2
+## 🆕 What's New in v1.0.3
 
-### 🔄 Smart Local Backup & Restore System
+### 🛡️ Continuous Auto-Backup & Data Protection
+- **Silent Auto-Sync** — Every time you save a book, add stock, edit details, or delete anything, a background process instantly writes a full `database.json` snapshot to your public `Documents/Jamna Stone Backup/` folder. Your data is **always protected** — even if you uninstall the app, the backup folder remains untouched on your phone's storage.
+- **Security & Backup Status Page** — A brand new animated screen accessible from Settings. On opening, it runs a live "security scan" with a pulsating shield animation that transitions into a glowing green ✅ **"System Secured"** verified badge, confirming your auto-sync is active. The page displays: last sync timestamp, total measurement books backed up, and total stock blocks backed up.
+- **No More "Keep App Data" Prompt** — Removed `hasFragileUserData` from the Android manifest. Since data is now continuously backed up to external storage, the OS-level uninstall prompt is no longer necessary.
+
+### 📝 Full History Editing
+- **Edit All Fields** — The "Edit Details" dialog on the History tab now lets you modify **Book Name**, **Party Name**, **Granite/Marble Name**, **Number Plate**, and **Date** — all from one popup with a built-in date picker.
+
+### 🔗 Block Detachment
+- **Detach Block from Book** — New "Detach Block" option in the History tab's popup menu. When a measurement book is linked to a stock block, you can now cleanly unlink it. The consumed slab count is automatically restored back into the available stock inventory.
+
+### 📊 Collapsible Inventory Overview
+- **Expandable Dashboard** — The overview cards on the Inventory page are now wrapped in a collapsible `ExpansionTile`. Tap to expand or collapse the "Available Stock" and "Total Originally Added" metrics, giving you more screen space for browsing your blocks.
+
+### 🔍 Improved Search & Keyboard Behavior
+- **Simplified Search Bar** — Replaced the autocomplete dropdown overlay on the Inventory page with a clean, standard search field. No more popup suggestions blocking your view.
+- **Keyboard Auto-Dismiss** — When you scroll the block list, the keyboard automatically hides via `keyboardDismissBehavior.onDrag`, so the search bar never gets in the way.
+
+### 👨‍💻 Developer Profile
+- **Contact Developer Page** — The "Contact Developer" screen now includes a gradient profile card for **Panchasara Poojan — Lead Developer & Designer**, giving the app a professional, personal touch.
+
+### 🗂️ Backup Folder Direct Access
+- **Open Backup Folder** — Added `open_filex` package to directly open the backup directory in the phone's native file manager (instead of showing an error or a fallback path).
+
+### 🎨 UI/UX Enhancements
+- **Settings Footer** — Modern footer with app name, slogan, version info, security badge, and "Made with ❤️ in India" tag.
+- **Measurement Summary Collapsible** — Top summary section in the slab measurement screen uses an `ExpansionTile` for clean hide/show of linked block info.
+- **Settings Tab Instant Refresh** — Navigating to Settings now forces a full re-initialization using `UniqueKey`, ensuring backup logs and preferences are always up-to-date.
+
+---
+
+### Previous: What Was New in v1.0.2
+
+#### 🔄 Smart Local Backup & Restore System
 - **Persistent Local Backups** — All data is backed up to `Documents/Jamna Stone Backup/` on your device's local storage, surviving even app uninstalls
 - **Differential Backup** — Only new and modified records are synced, making backups lightning fast
 - **Differential Restore** — Only missing data is imported from backups, preventing any duplicate entries
@@ -36,12 +69,12 @@ Whether you're at the quarry, in the warehouse, or on-site with a client, Jamna 
 - **Live Process Animations** — Beautiful scanning, syncing, and success animations displayed in real-time during backup/restore operations
 - **Smart Button States** — Buttons disable during processing to prevent duplicate operations, with live status text updates
 
-### 📦 Full Stock Management Module
+#### 📦 Full Stock Management Module
 - **Complete Stock Tracking** — Add, edit, and delete stock entries with granite name, thickness, quantity, and pricing
 - **Professional Stock PDFs** — Export stock reports as print-ready PDFs
 - **Integrated with Backup** — All stock data is included in local backup/restore operations
 
-### 🎨 Redesigned UI/UX
+#### 🎨 Redesigned UI/UX
 - **Glassmorphic Popups** — Frosted glass blur effect with smooth scale-in transitions for all dialogs
 - **AnimatedSwitcher Transitions** — Smooth cross-fade between popup states (initial → scanning → syncing → success/error)
 - **Premium Card Design** — Rounded corners (32px radius), elevated shadows, and gradient icon containers
@@ -91,8 +124,9 @@ Whether you're at the quarry, in the warehouse, or on-site with a client, Jamna 
 - **4-Digit PIN Lock** — Protect sensitive business data behind a personal PIN
 - **Secure Recovery** — Built-in developer recovery PIN (`9009`) prevents permanent lockouts
 - **100% Offline** — All data is stored locally on-device; nothing ever leaves your phone
+- **Continuous Auto-Backup** — Every data change is silently synced to the public `Documents/` folder, ensuring data survives even full app uninstalls
+- **Security Status Dashboard** — Animated "Check Backup Status" screen with real-time scan, showing sync health, last backup time, and item counts
 - **Clean PDF Exports** — Developer credentials are excluded from shared documents
-- **Persistent Data** — Backup folder survives app uninstall (`hasFragileUserData` enabled)
 
 ### 📄 Professional PDF Reporting
 - Export any measurement book as a **high-quality, print-ready PDF**
@@ -127,8 +161,12 @@ The project follows a **feature-first clean architecture** pattern:
 lib/
 ├── main.dart                          # App entry point & theme configuration
 ├── core/
-│   └── localization/
-│       └── app_translations.dart      # i18n engine (EN, HI, GU)
+│   ├── localization/
+│   │   └── app_translations.dart      # i18n engine (EN, HI, GU)
+│   ├── theme/
+│   │   └── app_theme.dart             # Material 3 theme & color scheme
+│   └── utils/
+│       └── pdf_generator.dart         # PDF report builder
 └── features/
     ├── splash/                        # Animated splash screen
     │   └── presentation/screens/
@@ -143,13 +181,18 @@ lib/
     │   ├── data/models/               # Slab & Book data models
     │   ├── presentation/screens/      # Measurement, History & restore UI
     │   └── services/                  # Storage, backup & persistence layer
-    │       ├── storage_service.dart   # JSON-based local storage
-    │       └── backup_service.dart    # Differential backup & restore engine
+    │       ├── storage_service.dart   # JSON-based local storage + auto-sync
+    │       └── backup_service.dart    # Differential backup, restore & silent sync
     ├── stock/                         # Stock management module
     │   ├── data/models/               # StockEntry data model
-    │   └── presentation/screens/      # Stock list, add/edit UI
+    │   ├── presentation/screens/      # Stock list, add/edit UI
+    │   └── services/
+    │       └── stock_storage_service.dart  # Stock CRUD + auto-sync triggers
     ├── settings/                      # App settings & preferences
     │   └── presentation/screens/
+    │       ├── settings_screen.dart        # Main settings page
+    │       ├── info_screen.dart            # Reusable info/about page template
+    │       └── backup_status_screen.dart   # Animated security scan & status page
     └── about/                         # About Us & contact info
         └── presentation/screens/
 ```
@@ -171,7 +214,7 @@ lib/
 | **Sharing** | `share_plus` for cross-app sharing |
 | **Date Handling** | `intl` for locale-aware formatting |
 | **QR Codes** | `qr_flutter` for QR code generation |
-| **File Access** | `file_picker` + `permission_handler` for storage access |
+| **File Access** | `file_picker` + `permission_handler` + `open_filex` for storage access & native folder opening |
 
 ---
 
@@ -184,38 +227,63 @@ lib/
 | **Home** | Dashboard with backup/restore controls, sync stats, app guide, and language selector |
 | **New Book** | Form to create a measurement book (granite, party, plate, date) |
 | **Measurement** | Core data-entry grid with auto-save and fill-down logic |
-| **History** | Chronological list of all saved books with search, sync badges, and restore option |
-| **Stock** | Full stock inventory management with add, edit, delete, search |
+| **History** | Chronological list of all saved books with search, sync badges, full-field editing, and block detach |
+| **Stock** | Full stock inventory management with add, edit, delete, collapsible overview dashboard |
 | **PDF Preview** | Full print-ready preview with share/export options |
 | **Settings** | Theme toggle, language selection, PIN management |
+| **Backup Status** | Animated security scan with real-time sync health, backup counts, and timestamp |
+| **Contact Developer** | Developer profile card, email contact, and bug reporting guide |
 | **About Us** | Company info and contact details |
 
 ---
 
-## 🔄 Backup System — How It Works
+## 🔁 Backup System — How It Works
 
-Jamna Stone uses a sophisticated **differential local backup system** that works like a simplified version of cloud sync but entirely on your device's local storage:
+Jamna Stone uses a **multi-layered backup system** that combines instant background syncing with on-demand manual backups:
 
-### Backup Flow
+### ⚡ Continuous Silent Auto-Sync (NEW in v1.0.3)
+```
+Every data change (save book, add stock, edit, delete, detach block)
+   ↓
+StorageService / StockStorageService writes to local app storage
+   ↓
+Automatically calls BackupService.silentDatabaseSync()
+   ↓
+Full database.json snapshot written to Documents/Jamna Stone Backup/
+```
+> 🔒 **This means your data is ALWAYS safe.** Even if you uninstall the app, the backup folder in `Documents/` remains on your phone.
+
+### 📤 Manual Backup Flow (Full PDF Export)
 ```
 1. Click "Backup" on Home Screen
    ↓
 2. 🔍 Scanning Phase — Counts total books & stock, identifies unsynced items
    ↓
-3. ☁️ Syncing Phase — Writes only new/modified data to Documents/Jamna Stone Backup/
+3. 🔄 Syncing Phase — Generates PDFs for new books + updates database.json
    ↓
 4. ✅ Success — Marks all items as synced, shows green checkmark animation
 ```
 
-### Restore Flow
+### 📥 Restore Flow
 ```
 1. Click "Load Data" on Home Screen or History Screen
    ↓
 2. 🔍 Scanning Phase — Reads backup folder, compares with current app data
    ↓
-3. ☁️ Importing Phase — Imports ONLY missing items (differential merge)
+3. 🔄 Importing Phase — Imports ONLY missing items (differential merge)
    ↓
 4. ✅ Success — New items added, duplicates skipped, page refreshed
+```
+
+### 🛡️ Security Status Check
+```
+1. Open Settings → Click "Check Backup Status"
+   ↓
+2. 🔵 Scanning Animation — Pulsating shield icon while verifying storage
+   ↓
+3. 🟢 System Secured — Green verified badge with auto-sync details
+   ↓
+4. Displays: Last sync time, # of books backed up, # of stock blocks backed up
 ```
 
 ### Backup Storage Location
@@ -293,6 +361,7 @@ Jamna_stone_Calculator/
 
 | Version | Date | Changes |
 |---|---|---|
+| **v1.0.3** | Aug 2026 | Continuous silent auto-backup to external storage, animated Security & Backup Status page, full history editing (name, party, granite, plate, date), block detachment with stock restoration, collapsible inventory overview, simplified search bar with keyboard auto-dismiss on scroll, developer profile in Contact Developer, `open_filex` for native folder opening, modern settings footer, removed `hasFragileUserData` in favor of continuous external sync |
 | **v1.0.2** | Aug 2026 | Smart local backup & restore system with differential sync, live process animations (scanning, syncing, success), button lock during processing, stock management module with PDF export, glassmorphic popup redesign with AnimatedSwitcher transitions, sync status badges on books & stock, backup data persistence through app uninstalls |
 | **v1.0.1** | Jul 2026 | Stock management, PDF enhancements, UI polish |
 | **v1.0.0** | Jun 2026 | Initial release — Measurement books, PDF export, PIN lock, multi-language support, dark/light theme |
