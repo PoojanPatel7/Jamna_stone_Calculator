@@ -1,15 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:archive/archive.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'storage_service.dart';
 import '../../stock/services/stock_storage_service.dart';
 import '../data/models/slab_models.dart';
 import '../../stock/data/models/stock_models.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/foundation.dart';
 
@@ -56,23 +52,24 @@ class BackupService {
     return logs.map((l) => BackupLog.fromJson(jsonDecode(l))).toList();
   }
 
-  /// Requests storage permissions for Android.
+  /// Verifies storage access for Android. Native app storage requires zero permissions.
   static Future<bool> requestStoragePermission() async {
-    if (!Platform.isAndroid) return true;
-    
-    if (await Permission.manageExternalStorage.isGranted) return true;
-    final status = await Permission.manageExternalStorage.request();
-    if (status.isGranted) return true;
-    
-    final storageStatus = await Permission.storage.request();
-    return storageStatus.isGranted;
+    return true;
   }
 
   /// Gets the persistent backup directory.
+  /// Uses app-specific external storage or documents storage (100% compliant with Google Play).
   static Future<Directory?> getBackupDirectory() async {
-    if (!await requestStoragePermission()) return null;
+    Directory? baseDir;
+    try {
+      if (Platform.isAndroid) {
+        baseDir = await getExternalStorageDirectory();
+      }
+    } catch (_) {}
     
-    final dir = Directory('/storage/emulated/0/Documents/Jamna Stone Backup');
+    baseDir ??= await getApplicationDocumentsDirectory();
+
+    final dir = Directory('${baseDir.path}/Jamna Stone Backup');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -92,7 +89,7 @@ class BackupService {
   }) async {
     final backupDir = await getBackupDirectory();
     if (backupDir == null) {
-      throw Exception('Storage permission denied.');
+      throw Exception('Storage directory could not be created.');
     }
     
     onProgress(0.05);
@@ -171,16 +168,29 @@ class BackupService {
   }
   
   /// Reads the backup file from local storage and returns raw maps to parse.
+  /// Checks primary persistent backup directory first, with fallback to legacy path.
   static Future<Map<String, dynamic>?> getBackupData() async {
     try {
+      // 1. Check primary persistent backup directory
       final backupDir = await getBackupDirectory();
-      if (backupDir == null) return null;
+      if (backupDir != null) {
+        final dbFile = File('${backupDir.path}/database.json');
+        if (await dbFile.exists()) {
+          final dbContent = await dbFile.readAsString();
+          return jsonDecode(dbContent) as Map<String, dynamic>;
+        }
+      }
       
-      final dbFile = File('${backupDir.path}/database.json');
-      if (!await dbFile.exists()) return null;
+      // 2. Check fallback legacy Documents path (if user had old app version)
+      try {
+        final legacyFile = File('/storage/emulated/0/Documents/Jamna Stone Backup/database.json');
+        if (await legacyFile.exists()) {
+          final dbContent = await legacyFile.readAsString();
+          return jsonDecode(dbContent) as Map<String, dynamic>;
+        }
+      } catch (_) {}
       
-      final dbContent = await dbFile.readAsString();
-      return jsonDecode(dbContent) as Map<String, dynamic>;
+      return null;
     } catch (e) {
       debugPrint('Failed to read backup data: $e');
       return null;
