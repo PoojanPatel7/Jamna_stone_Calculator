@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'storage_service.dart';
 import '../../stock/services/stock_storage_service.dart';
 import '../data/models/slab_models.dart';
@@ -281,6 +284,74 @@ class BackupService {
       await dbFile.writeAsString(jsonEncode(dbMap));
     } catch (e) {
       debugPrint('Silent backup failed: $e');
+    }
+  }
+
+  /// Exports and shares the database.json file to Google Drive, WhatsApp, or Device Storage.
+  static Future<bool> exportDatabaseFile() async {
+    try {
+      await silentDatabaseSync();
+
+      final backupDir = await getBackupDirectory();
+      if (backupDir == null) return false;
+
+      final dbFile = File('${backupDir.path}/database.json');
+      if (!await dbFile.exists()) {
+        final history = await StorageService.loadHistory();
+        final stockEntries = await StockStorageService.loadStockEntries();
+        final blockNames = await StockStorageService.loadBlockNames();
+        final dbMap = {
+          'history': history.map((e) => e.toJson()).toList(),
+          'stockEntries': stockEntries.map((e) => e.toJson()).toList(),
+          'blockNames': blockNames,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        await dbFile.writeAsString(jsonEncode(dbMap));
+      }
+
+      final dateStr = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await Share.shareXFiles(
+        [XFile(dbFile.path, mimeType: 'application/json', name: 'Jamna_Stone_Backup_$dateStr.json')],
+        text: 'Jamna Stone Database Backup ($dateStr)',
+        subject: 'Jamna Stone Backup',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Export database failed: $e');
+      return false;
+    }
+  }
+
+  /// Opens the native system file selector so the user can choose a database.json backup
+  /// from Google Drive, Downloads, or any folder on their device.
+  static Future<Map<String, dynamic>?> pickBackupFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        dialogTitle: 'Select Jamna Stone Backup File',
+      );
+
+      if (result == null || result.files.isEmpty) return null;
+
+      final path = result.files.single.path;
+      String content;
+      if (path != null) {
+        content = await File(path).readAsString();
+      } else if (result.files.single.bytes != null) {
+        content = utf8.decode(result.files.single.bytes!);
+      } else {
+        return null;
+      }
+
+      final decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Pick backup file failed: $e');
+      return null;
     }
   }
 }
