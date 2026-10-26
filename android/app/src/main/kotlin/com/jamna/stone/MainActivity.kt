@@ -1,4 +1,4 @@
-package com.jamnstone.slab_count
+package com.jamna.stone
 
 import io.flutter.embedding.android.FlutterActivity
 

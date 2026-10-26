@@ -350,7 +350,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                       ),
                       ...availableStocks.map((stock) {
                         final remaining = stock.totalSlabCount - (stockConsumedSlabs[stock.id] ?? 0);
-                        final label = '${stock.blockName} (#${stock.blockNumber}) - $remaining slabs left';
+                        final dimPart = (stock.height > 0 && stock.width > 0)
+                            ? ' • ${stock.height % 1 == 0 ? stock.height.toInt() : stock.height}×${stock.width % 1 == 0 ? stock.width.toInt() : stock.width}'
+                            : '';
+                        final label = '${stock.blockName} (#${stock.blockNumber}) - $remaining slabs left$dimPart';
                         return DropdownMenuItem<String?>(
                           value: stock.id,
                           child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -379,6 +382,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                         border: Border.all(color: isDark ? Colors.blue.withOpacity(0.3) : Colors.blue.shade200),
                       ),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(Icons.info_outline_rounded, size: 20, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade700),
                           const SizedBox(width: 12),
@@ -390,7 +394,20 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                                   'Left in Stock: ${selectedStock!.totalSlabCount - (stockConsumedSlabs[selectedStock!.id] ?? 0)} slabs',
                                   style: TextStyle(fontSize: 13, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade800, fontWeight: FontWeight.bold),
                                 ),
-                                const SizedBox(height: 2),
+                                if (selectedStock!.height > 0 || selectedStock!.width > 0) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.straighten_rounded, size: 14, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Slab Size: ${selectedStock!.height > 0 ? (selectedStock!.height % 1 == 0 ? selectedStock!.height.toInt() : selectedStock!.height) : "-"} × ${selectedStock!.width > 0 ? (selectedStock!.width % 1 == 0 ? selectedStock!.width.toInt() : selectedStock!.width) : "-"}',
+                                        style: TextStyle(fontSize: 12, color: isDark ? Colors.lightBlueAccent : Colors.blue.shade900, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                const SizedBox(height: 4),
                                 Text(
                                   'Measurement sheet will be created with exactly ${selectedStock!.totalSlabCount - (stockConsumedSlabs[selectedStock!.id] ?? 0)} rows.',
                                   style: TextStyle(fontSize: 11, color: isDark ? Colors.lightBlueAccent.withOpacity(0.7) : Colors.blue.shade800.withOpacity(0.8)),
@@ -500,7 +517,14 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
                           _linkedBlockDisplay = null;
                         }
                         
-                        _slabs = List.generate(rowCount, (i) => SlabEntry(slabNo: i + 1));
+                        _slabs = List.generate(
+                          rowCount,
+                          (i) => SlabEntry(
+                            slabNo: i + 1,
+                            length: selectedStock != null && selectedStock!.height > 0 ? selectedStock!.height : 0.0,
+                            width: selectedStock != null && selectedStock!.width > 0 ? selectedStock!.width : 0.0,
+                          ),
+                        );
                         _recalculateSlabNumbers();
                         _saveBookLive();
                       });
@@ -568,7 +592,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) async {
               switch (value) {
-                case 'export': _exportData(); break;
+                case 'share':
+                case 'export':
+                  _sharePdfDirectly();
+                  break;
                 case 'pdf': _openPdfPreview(); break;
 
                 case 'clear':
@@ -605,7 +632,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'save', child: Row(children: [Icon(Icons.save_rounded, size: 20), SizedBox(width: 8), Text('Save Book')])),
-              const PopupMenuItem(value: 'export', child: Row(children: [Icon(Icons.share_rounded, size: 20), SizedBox(width: 8), Text('Export Data')])),
+              const PopupMenuItem(value: 'share', child: Row(children: [Icon(Icons.share_rounded, color: Colors.blue, size: 20), SizedBox(width: 8), Text('Share PDF')])),
               const PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_rounded, size: 20), SizedBox(width: 8), Text('PDF Preview')])),
 
               const PopupMenuDivider(),
@@ -634,12 +661,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     );
   }
 
-  bool _isSummaryExpanded = false;
-
   Widget _buildTopSummary() {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
       margin: EdgeInsets.fromLTRB(16, 8, 16, isLandscape ? 4 : 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(16),
@@ -651,17 +677,10 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
           ),
         ],
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: _isSummaryExpanded,
-          onExpansionChanged: (expanded) {
-            setState(() {
-              _isSummaryExpanded = expanded;
-            });
-          },
-          tilePadding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-          title: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
@@ -699,60 +718,50 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
               ),
             ],
           ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_bookId != null) ...[
-                    const Divider(color: Colors.black26),
-                    const SizedBox(height: 4),
-                    Text(_bookName, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: Text('Party: ${_partyName.isNotEmpty ? _partyName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
-                        Expanded(child: Text('Granite: ${_graniteName.isNotEmpty ? _graniteName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: Text('Date: ${_bookDate.day}/${_bookDate.month}/${_bookDate.year}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
-                        if (_numberPlate.isNotEmpty)
-                          Expanded(child: Text('Plate: $_numberPlate', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-                      ],
-                    ),
-                    if (_linkedBlockDisplay != null && _linkedBlockDisplay!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.link_rounded, size: 16, color: Colors.black54),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Linked Block: $_linkedBlockDisplay',
-                                style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ],
-              ),
+          if (_bookId != null) ...[
+            const Divider(color: Colors.black26, height: 20),
+            Text(_bookName, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text('Party: ${_partyName.isNotEmpty ? _partyName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
+                Expanded(child: Text('Granite: ${_graniteName.isNotEmpty ? _graniteName : "N/A"}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+              ],
             ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text('Date: ${_bookDate.day}/${_bookDate.month}/${_bookDate.year}', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold))),
+                if (_numberPlate.isNotEmpty)
+                  Expanded(child: Text('Plate: $_numberPlate', style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+              ],
+            ),
+            if (_linkedBlockDisplay != null && _linkedBlockDisplay!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.link_rounded, size: 16, color: Colors.black54),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Linked Block: $_linkedBlockDisplay',
+                        style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1017,6 +1026,41 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     );
   }
 
+  // Direct Share PDF matching History Page style
+  Future<void> _sharePdfDirectly() async {
+    final validSlabs = _slabs.where((s) => s.length > 0 || s.width > 0).toList();
+    if (validSlabs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No measurement data to share!'), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    String baseName = '';
+    if (_partyName.trim().isNotEmpty) {
+      baseName += _partyName.trim();
+    }
+    if (_graniteName.trim().isNotEmpty) {
+      if (baseName.isNotEmpty) baseName += '-';
+      baseName += _graniteName.trim();
+    }
+    if (baseName.isEmpty) {
+      baseName = _bookName.trim().isNotEmpty 
+          ? _bookName.trim() 
+          : 'Book_${_bookId ?? DateTime.now().millisecondsSinceEpoch}';
+    }
+    final safeName = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+
+    final pdf = _buildPdfDocument(safeName);
+    final bytes = await pdf.save();
+
+    await Printing.sharePdf(bytes: bytes, filename: '$safeName.pdf');
+  }
+
+  // --- Previous export bottom-sheet & file name prompt retained in comments as requested ---
+  /*
   Future<void> _exportData() async {
     if (_slabs.isEmpty) return;
     
@@ -1065,6 +1109,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       }
     );
   }
+  */
 
   Future<Uint8List> _generatePdfData(PdfPageFormat format, {bool isPreview = false}) async {
     final pdf = _buildPdfDocument(_bookName, isPreview: isPreview);
@@ -1082,6 +1127,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     }));
   }
 
+  /*
   Future<void> _askForFileName({required bool isPdf, required String action}) async {
     final String defaultName = _partyName.trim().isNotEmpty ? _partyName.trim() : _bookName.trim();
     final controller = TextEditingController(text: defaultName);
@@ -1118,6 +1164,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
       }
     }
   }
+  */
 
   pw.Document _buildPdfDocument(String title, {bool isPreview = false}) {
     final pdf = pw.Document();

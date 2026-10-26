@@ -71,7 +71,7 @@ class _MainScreenState extends State<MainScreen> {
         }
       },
       child: Scaffold(
-        extendBody: true,
+        extendBody: false,
         body: IndexedStack(
           index: _currentIndex,
           children: [
@@ -101,32 +101,35 @@ class _MainScreenState extends State<MainScreen> {
             SettingsScreen(key: _settingsKey),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark 
-                  ? const Color(0xFF1E1E1E) 
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(0, Icons.home_rounded, 'home'.tr),
-                _buildNavItem(1, Icons.calculate_rounded, 'measure'.tr),
-                _buildNavItem(2, Icons.history_rounded, 'history'.tr),
-                _buildNavItem(3, Icons.inventory_2_rounded, 'Stock'),
-                _buildNavItem(4, Icons.settings_rounded, 'Settings'),
-              ],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).brightness == Brightness.dark 
+                ? const Color(0xFF1E1E1E) 
+                : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildNavItem(0, Icons.home_rounded, 'home'.tr),
+                  _buildNavItem(1, Icons.calculate_rounded, 'measure'.tr),
+                  _buildNavItem(2, Icons.history_rounded, 'history'.tr),
+                  _buildNavItem(3, Icons.inventory_2_rounded, 'Stock'),
+                  _buildNavItem(4, Icons.settings_rounded, 'Settings'),
+                ],
+              ),
             ),
           ),
         ),

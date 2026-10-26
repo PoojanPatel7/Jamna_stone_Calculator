@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../slabs/services/auth_service.dart';
-import '../../../home/presentation/screens/home_screen.dart';
+import '../../../main/presentation/screens/main_screen.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -38,7 +38,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _navigateToHome() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      MaterialPageRoute(builder: (_) => const MainScreen()),
     );
   }
 

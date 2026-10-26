@@ -582,6 +582,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (!mounted) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dimText = (stockEntry.height > 0 || stockEntry.width > 0)
+        ? ' • Size: ${stockEntry.height % 1 == 0 ? stockEntry.height.toInt() : stockEntry.height}×${stockEntry.width % 1 == 0 ? stockEntry.width.toInt() : stockEntry.width}'
+        : '';
 
     showDialog(
       context: context,
@@ -636,7 +639,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     color: Colors.blue,
                     slabs: stockEntry.totalSlabCount,
                     area: stockEntry.estimatedArea,
-                    subtitle: '${stockEntry.blockTypeName} • ${stockEntry.isPolished ? "Polished" : "Unpolished"}',
+                    subtitle: '${stockEntry.blockTypeName} • ${stockEntry.isPolished ? "Polished" : "Unpolished"}$dimText',
                   ),
                   const SizedBox(height: 12),
 
@@ -881,9 +884,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ? '${entry.blockName} (#${entry.blockNumber}) - ${entry.blockTypeName}'
                     : '${entry.blockName} - ${entry.blockTypeName}';
                     
+                final dimSubtitle = (entry.height > 0 || entry.width > 0)
+                    ? ' • ${entry.height % 1 == 0 ? entry.height.toInt() : entry.height}×${entry.width % 1 == 0 ? entry.width.toInt() : entry.width}'
+                    : '';
                 return ListTile(
                   title: Text(display),
-                  subtitle: Text('${entry.totalSlabCount} slabs • ${entry.estimatedArea.toStringAsFixed(1)} sqft'),
+                  subtitle: Text('${entry.totalSlabCount} slabs • ${entry.estimatedArea.toStringAsFixed(1)} sqft$dimSubtitle'),
                   onTap: () => Navigator.pop(context, entry),
                 );
               },

@@ -20,6 +20,8 @@ class _AddStockScreenState extends State<AddStockScreen> {
   final _slabCountController = TextEditingController();
   final _areaController = TextEditingController();
   final _blockNumberController = TextEditingController();
+  final _heightController = TextEditingController();
+  final _widthController = TextEditingController();
   
   bool _isPolished = true;
   DateTime _selectedDate = DateTime.now();
@@ -39,8 +41,28 @@ class _AddStockScreenState extends State<AddStockScreen> {
       _slabCountController.text = widget.entryToEdit!.totalSlabCount.toString();
       _areaController.text = widget.entryToEdit!.estimatedArea.toString();
       _selectedDate = widget.entryToEdit!.date;
+      if (widget.entryToEdit!.height > 0) {
+        _heightController.text = widget.entryToEdit!.height % 1 == 0 
+            ? widget.entryToEdit!.height.toInt().toString() 
+            : widget.entryToEdit!.height.toString();
+      }
+      if (widget.entryToEdit!.width > 0) {
+        _widthController.text = widget.entryToEdit!.width % 1 == 0 
+            ? widget.entryToEdit!.width.toInt().toString() 
+            : widget.entryToEdit!.width.toString();
+      }
     }
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _slabCountController.dispose();
+    _areaController.dispose();
+    _blockNumberController.dispose();
+    _heightController.dispose();
+    _widthController.dispose();
+    super.dispose();
   }
   
   Future<void> _loadData() async {
@@ -132,6 +154,8 @@ class _AddStockScreenState extends State<AddStockScreen> {
         blockTypeId: _selectedBlockType,
         blockTypeName: _selectedBlockType,
         isSold: widget.entryToEdit?.isSold ?? false,
+        height: double.tryParse(_heightController.text) ?? 0.0,
+        width: double.tryParse(_widthController.text) ?? 0.0,
       );
       
       await StockStorageService.saveStockEntry(stockEntry);
@@ -143,7 +167,7 @@ class _AddStockScreenState extends State<AddStockScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Stock'),
+        title: Text(widget.entryToEdit != null ? 'Edit Stock' : 'Add Stock'),
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -269,6 +293,38 @@ class _AddStockScreenState extends State<AddStockScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _heightController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Slab Height',
+                                hintText: 'e.g. 60 or 5.0',
+                                prefixIcon: const Icon(Icons.height_rounded),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _widthController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Slab Width',
+                                hintText: 'e.g. 36 or 3.0',
+                                prefixIcon: const Icon(Icons.straighten_rounded),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       TextFormField(
                         controller: _slabCountController,
                         keyboardType: TextInputType.number,
@@ -277,8 +333,44 @@ class _AddStockScreenState extends State<AddStockScreen> {
                           prefixIcon: const Icon(Icons.layers),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
+                        onChanged: (_) => setState(() {}),
                         validator: (val) => val == null || val.isEmpty ? 'Enter count' : null,
                       ),
+                      if (_heightController.text.isNotEmpty && _widthController.text.isNotEmpty && _slabCountController.text.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            ActionChip(
+                              avatar: const Icon(Icons.calculate_outlined, size: 16, color: Colors.blue),
+                              label: const Text('Auto-calc Area (Inches: H×W/144)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                              onPressed: () {
+                                final h = double.tryParse(_heightController.text) ?? 0;
+                                final w = double.tryParse(_widthController.text) ?? 0;
+                                final count = int.tryParse(_slabCountController.text) ?? 0;
+                                if (h > 0 && w > 0 && count > 0) {
+                                  final area = (h * w * count) / 144.0;
+                                  _areaController.text = area.toStringAsFixed(1);
+                                }
+                              },
+                            ),
+                            ActionChip(
+                              avatar: const Icon(Icons.calculate_outlined, size: 16, color: Colors.blue),
+                              label: const Text('Auto-calc Area (Feet: H×W)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                              onPressed: () {
+                                final h = double.tryParse(_heightController.text) ?? 0;
+                                final w = double.tryParse(_widthController.text) ?? 0;
+                                final count = int.tryParse(_slabCountController.text) ?? 0;
+                                if (h > 0 && w > 0 && count > 0) {
+                                  final area = h * w * count;
+                                  _areaController.text = area.toStringAsFixed(1);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       
                       TextFormField(
@@ -313,7 +405,7 @@ class _AddStockScreenState extends State<AddStockScreen> {
               ElevatedButton.icon(
                 onPressed: _saveStock,
                 icon: const Icon(Icons.save),
-                label: const Text('Save Stock', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                label: Text(widget.entryToEdit != null ? 'Update Stock' : 'Save Stock', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

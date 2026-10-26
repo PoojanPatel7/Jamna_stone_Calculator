@@ -30,6 +30,8 @@ class StockEntry {
   String blockTypeName; // Cache the name for easy display
   bool isSold;
   bool isSynced;
+  double height;
+  double width;
 
   StockEntry({
     required this.id,
@@ -43,6 +45,8 @@ class StockEntry {
     required this.blockTypeName,
     this.isSold = false,
     this.isSynced = false,
+    this.height = 0.0,
+    this.width = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -57,6 +61,8 @@ class StockEntry {
     'blockTypeName': blockTypeName,
     'isSold': isSold,
     'isSynced': isSynced,
+    'height': height,
+    'width': width,
   };
 
   factory StockEntry.fromJson(Map<String, dynamic> json) => StockEntry(
@@ -71,5 +77,7 @@ class StockEntry {
     blockTypeName: json['blockTypeName'] ?? 'Unknown Type',
     isSold: json['isSold'] ?? false,
     isSynced: json['isSynced'] ?? false,
+    height: (json['height'] ?? 0.0).toDouble(),
+    width: (json['width'] ?? 0.0).toDouble(),
   );
 }
