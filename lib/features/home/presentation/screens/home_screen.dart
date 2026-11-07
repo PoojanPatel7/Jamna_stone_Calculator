@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui';
 import '../../../slabs/services/storage_service.dart';
@@ -10,6 +11,8 @@ import '../../../../main.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../../../slabs/services/backup_service.dart';
 import '../../../../core/utils/pdf_generator.dart';
+import '../../../../core/widgets/pwa_install_prompt.dart';
+import '../../../../core/utils/pwa_install.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onStartMeasurement;
@@ -40,6 +43,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadStats();
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        PwaInstallHelper.checkAndPromptOnLoad(context);
+      });
+    }
   }
 
   @override
@@ -303,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 24),
           const Text('Backup Complete', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
           const SizedBox(height: 12),
-          Text('All your data is securely stored locally.', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black87)),
+          Text(kIsWeb ? 'Your backup file has been downloaded and saved to your device Files/Downloads.' : 'All your data is securely stored locally.', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black87)),
           const SizedBox(height: 32),
           Container(
             padding: const EdgeInsets.all(16),
@@ -345,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : const Icon(Icons.cloud_sync_rounded, color: Colors.blue, size: 56).animate(onPlay: (controller) => controller.repeat()).rotate(duration: 2.seconds),
           ),
           const SizedBox(height: 32),
-          Text(isScanning ? 'Scanning files...' : 'Syncing to Local Storage...', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
+          Text(isScanning ? 'Scanning files...' : (kIsWeb ? 'Downloading Backup to Device...' : 'Syncing to Local Storage...'), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
           const SizedBox(height: 24),
           Stack(
             children: [
@@ -389,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 24),
         Text('Secure Backup', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
         const SizedBox(height: 8),
-        Text('Differential sync active. Only modified items will be saved locally.', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 14), textAlign: TextAlign.center),
+        Text(kIsWeb ? 'Saves an offline .json backup directly into your device Downloads/Files.' : 'Differential sync active. Only modified items will be saved locally.', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 14), textAlign: TextAlign.center),
         const SizedBox(height: 32),
         Container(
           padding: const EdgeInsets.all(20),
@@ -932,6 +940,22 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          if (kIsWeb && !isPwaStandalone())
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white12 : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.install_mobile_rounded, color: Colors.blueAccent),
+                tooltip: 'Install Jamna Stone App',
+                onPressed: () => PwaInstallHelper.showInstallGuide(context),
+              ),
+            ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             decoration: BoxDecoration(
@@ -998,6 +1022,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const PwaInstallBanner(),
+                  const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(

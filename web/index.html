@@ -1,46 +1,142 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Jamna Stone - Slab Counter and Stock Calculator">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="slab_count">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Jamna Stone">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png"/>
+  <link rel="shortcut icon" href="favicon.png" type="image/png">
 
-  <title>slab_count</title>
+  <title>Jamna Stone</title>
   <link rel="manifest" href="manifest.json">
-</head>
-<body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <script>
+    // 1. PWA installation prompt handling for PC & Android
+    window.deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      window.deferredPrompt = e;
+      console.log("[Jamna Stone] PWA install prompt ready.");
+      const banner = document.getElementById('pwa-install-banner');
+      if (banner && !window.isPwaStandalone()) {
+        banner.style.display = 'flex';
+      }
+    });
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+    window.triggerPwaInstall = function() {
+      if (window.deferredPrompt) {
+        window.deferredPrompt.prompt();
+        window.deferredPrompt.userChoice.then((choiceResult) => {
+          window.deferredPrompt = null;
+          const banner = document.getElementById('pwa-install-banner');
+          if (banner) banner.style.display = 'none';
+        });
+        return true;
+      }
+      return false;
+    };
+
+    window.isPwaStandalone = function() {
+      return window.matchMedia('(display-mode: standalone)').matches || 
+             (window.navigator && window.navigator.standalone === true);
+    };
+
+    // 2. Request persistent storage on Web/iOS
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then(function(persistent) {
+        console.log("[Jamna Stone] Persistent storage:", persistent ? "granted" : "default");
+      });
+    }
+
+    // 3. Instant Pop-up & Install Bar handler
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (!window.isPwaStandalone()) {
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+          const isAndroid = /Android/i.test(navigator.userAgent);
+          const playStoreUrl = 'https://play.google.com/store/apps/details?src=AppAgg.com&id=com.jamna.stone&referrer=utm_source%3DAppAgg.com%26utm_medium%3Dreferral%26utm_campaign%3DAppAgg';
+          
+          const banner = document.getElementById('pwa-install-banner');
+          const subtitle = document.getElementById('pwa-install-subtitle');
+          const btn = document.getElementById('pwa-install-btn');
+          
+          if (banner) {
+            banner.style.display = 'flex';
+            if (isIOS) {
+              subtitle.textContent = 'Add to iPhone Home Screen';
+              btn.textContent = 'How to Add';
+              btn.onclick = () => {
+                document.getElementById('ios-install-modal').style.display = 'flex';
+              };
+            } else if (isAndroid) {
+              subtitle.textContent = 'Official Google Play App';
+              btn.textContent = 'Play Store';
+              btn.style.background = '#01875f';
+              btn.onclick = () => {
+                window.open(playStoreUrl, '_blank');
+              };
+            } else {
+              subtitle.textContent = 'Install on PC / Desktop';
+              btn.onclick = () => {
+                if (!window.triggerPwaInstall()) {
+                  alert("To install on PC, click the Install icon (⊞ or ⬇) in your browser address bar.");
+                }
+              };
+            }
+          }
+        }
+      }, 1000);
+    });
+  </script>
+</head>
+<body style="margin:0; padding:0; overflow:hidden;">
+  <!-- Instant Floating Install Pop-up -->
+  <div id="pwa-install-banner" style="display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:999999; background:rgba(30, 41, 59, 0.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); color:white; padding:10px 16px; border-radius:50px; box-shadow:0 12px 32px rgba(0,0,0,0.45); font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:13px; align-items:center; gap:12px; width:max-content; max-width:92%; border: 1px solid rgba(255,255,255,0.2);">
+    <img src="apple-touch-icon.png" style="width:34px; height:34px; border-radius:9px; object-fit:contain; background:#ffffff; padding:2px; box-shadow:0 2px 6px rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.25);">
+    <div style="display:flex; flex-direction:column;">
+      <strong style="font-size:13px; font-weight:700;">Jamna Stone</strong>
+      <span id="pwa-install-subtitle" style="font-size:11px; opacity:0.8;">Install App</span>
+    </div>
+    <button id="pwa-install-btn" style="background:#2563eb; color:white; border:none; padding:7px 16px; border-radius:24px; font-size:12px; font-weight:bold; cursor:pointer; margin-left:4px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">Install</button>
+    <button onclick="document.getElementById('pwa-install-banner').style.display='none'" style="background:transparent; border:none; color:rgba(255,255,255,0.6); font-size:20px; line-height:1; cursor:pointer; padding:0 4px;">&times;</button>
+  </div>
+
+  <!-- iOS Instruction Modal -->
+  <div id="ios-install-modal" style="display:none; position:fixed; inset:0; z-index:1000000; background:rgba(0,0,0,0.6); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:20px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div style="background:#ffffff; color:#0f172a; max-width:380px; width:100%; border-radius:24px; padding:26px; box-shadow:0 20px 40px rgba(0,0,0,0.3); text-align:center;">
+      <img src="apple-touch-icon.png" style="width:68px; height:68px; border-radius:18px; object-fit:contain; background:#ffffff; padding:4px; margin:0 auto 14px auto; display:block; box-shadow:0 4px 14px rgba(0,0,0,0.12); border:1px solid #e2e8f0;">
+      <h3 style="margin:0 0 6px 0; font-size:20px; font-weight:800;">Install on iPhone</h3>
+      <p style="margin:0 0 20px 0; font-size:13px; color:#64748b;">Add to your Home Screen for full-screen offline use.</p>
+      <div style="text-align:left; background:#f8fafc; border-radius:16px; padding:14px; margin-bottom:20px; font-size:13px; border:1px solid #e2e8f0;">
+        <div style="margin-bottom:12px; display:flex; align-items:center; gap:10px;">
+          <span style="background:#2563eb; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">1</span>
+          <span>Tap the <strong>Share</strong> button (⎋) at the bottom of Safari.</span>
+        </div>
+        <div style="margin-bottom:12px; display:flex; align-items:center; gap:10px;">
+          <span style="background:#2563eb; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">2</span>
+          <span>Scroll down and tap <strong>"Add to Home Screen" (+)</strong>.</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="background:#2563eb; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">3</span>
+          <span>Tap <strong>Add</strong> in the top-right. App is installed!</span>
+        </div>
+      </div>
+      <button onclick="document.getElementById('ios-install-modal').style.display='none'" style="width:100%; background:#2563eb; color:white; border:none; padding:12px; border-radius:14px; font-size:15px; font-weight:700; cursor:pointer;">Got it</button>
+    </div>
+  </div>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

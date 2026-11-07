@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
 import '../../../main/presentation/screens/main_screen.dart';
 
@@ -19,12 +20,15 @@ class _SplashScreenState extends State<SplashScreen> {
     
     _controller = VideoPlayerController.asset('assets/videos/splash_animation.mp4')
       ..initialize().then((_) {
+        if (kIsWeb) {
+          _controller.setVolume(0.0);
+        }
         setState(() {}); // Ensure the first frame is shown
-        _controller.play();
-      });
+        _controller.play().catchError((_) {});
+      }).catchError((_) {});
 
     // Wait for the video to play, 3-4 seconds is usually good
-    Future.delayed(const Duration(milliseconds: 3500), () {
+    Future.delayed(Duration(milliseconds: kIsWeb ? 2000 : 3500), () {
       if (mounted) {
         _navigateToHome();
       }

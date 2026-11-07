@@ -11,6 +11,8 @@ import '../data/models/slab_models.dart';
 import '../../stock/data/models/stock_models.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+import '../../../core/utils/web_downloader.dart';
 
 class BackupLog {
   final String date;
@@ -63,6 +65,7 @@ class BackupService {
   /// Gets the persistent backup directory.
   /// Uses app-specific external storage or documents storage (100% compliant with Google Play).
   static Future<Directory?> getBackupDirectory() async {
+    if (kIsWeb) return null;
     Directory? baseDir;
     try {
       if (Platform.isAndroid) {
@@ -90,6 +93,54 @@ class BackupService {
     required pw.Document Function(SlabBook) pdfGenerator,
     required void Function(double) onProgress,
   }) async {
+    if (kIsWeb) {
+      onProgress(0.1);
+      final history = await StorageService.loadHistory();
+      final stockEntries = await StockStorageService.loadStockEntries();
+      final blockNames = await StockStorageService.loadBlockNames();
+      
+      final unsyncedBooks = history.where((b) => !b.isSynced).toList();
+      final int totalToProcess = unsyncedBooks.length;
+      
+      for (var book in history) {
+        book.isSynced = true;
+      }
+      for (var entry in stockEntries) {
+        entry.isSynced = true;
+      }
+      
+      await StorageService.writeHistory(history);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('stock_entries_data', jsonEncode(stockEntries.map((e) => e.toJson()).toList()));
+      
+      onProgress(0.5);
+      
+      final dbMap = {
+        'history': history.map((e) => e.toJson()).toList(),
+        'stockEntries': stockEntries.map((e) => e.toJson()).toList(),
+        'blockNames': blockNames,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      final jsonString = jsonEncode(dbMap);
+      final dateStr = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      final bytes = Uint8List.fromList(utf8.encode(jsonString));
+      
+      // Trigger instant 1-tap download into iPhone Files
+      await downloadFileUniversal(
+        bytes: bytes,
+        fileName: 'Jamna_Stone_Backup_$dateStr.json',
+        mimeType: 'application/json',
+      );
+      
+      final now = DateTime.now();
+      final dateDisplay = "${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}";
+      await prefs.setString('widget_backup_date', dateDisplay);
+      await _logEvent('Backup', 'Successfully backed up $totalToProcess measurement sheets and downloaded database backup.');
+      onProgress(1.0);
+      return;
+    }
+
     final backupDir = await getBackupDirectory();
     if (backupDir == null) {
       throw Exception('Storage directory could not be created.');
@@ -174,6 +225,7 @@ class BackupService {
   /// Checks primary persistent backup directory first, with fallback to legacy path.
   static Future<Map<String, dynamic>?> getBackupData() async {
     try {
+      if (kIsWeb) return null;
       // 1. Check primary persistent backup directory
       final backupDir = await getBackupDirectory();
       if (backupDir != null) {
@@ -265,6 +317,7 @@ class BackupService {
   /// Silently updates the database.json in the backup folder to ensure data is never lost, 
   /// even on app uninstall. Call this after data modifications.
   static Future<void> silentDatabaseSync() async {
+    if (kIsWeb) return;
     try {
       final backupDir = await getBackupDirectory();
       if (backupDir == null) return;
@@ -290,6 +343,27 @@ class BackupService {
   /// Exports and shares the database.json file to Google Drive, WhatsApp, or Device Storage.
   static Future<bool> exportDatabaseFile() async {
     try {
+      if (kIsWeb) {
+        final history = await StorageService.loadHistory();
+        final stockEntries = await StockStorageService.loadStockEntries();
+        final blockNames = await StockStorageService.loadBlockNames();
+        final dbMap = {
+          'history': history.map((e) => e.toJson()).toList(),
+          'stockEntries': stockEntries.map((e) => e.toJson()).toList(),
+          'blockNames': blockNames,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        final dateStr = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+        final jsonString = jsonEncode(dbMap);
+        final bytes = Uint8List.fromList(utf8.encode(jsonString));
+        await downloadFileUniversal(
+          bytes: bytes,
+          fileName: 'Jamna_Stone_Backup_$dateStr.json',
+          mimeType: 'application/json',
+        );
+        return true;
+      }
+
       await silentDatabaseSync();
 
       final backupDir = await getBackupDirectory();
@@ -330,16 +404,16 @@ class BackupService {
         type: FileType.custom,
         allowedExtensions: ['json'],
         dialogTitle: 'Select Jamna Stone Backup File',
+        withData: true,
       );
 
       if (result == null || result.files.isEmpty) return null;
 
-      final path = result.files.single.path;
       String content;
-      if (path != null) {
-        content = await File(path).readAsString();
-      } else if (result.files.single.bytes != null) {
+      if (kIsWeb || result.files.single.bytes != null) {
         content = utf8.decode(result.files.single.bytes!);
+      } else if (result.files.single.path != null) {
+        content = await File(result.files.single.path!).readAsString();
       } else {
         return null;
       }

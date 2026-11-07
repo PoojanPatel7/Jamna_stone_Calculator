@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:slab_count/core/widgets/pwa_install_prompt.dart';
+import 'package:slab_count/core/utils/pwa_install.dart';
 import 'package:slab_count/main.dart';
 import 'package:slab_count/core/localization/app_translations.dart';
 import 'package:slab_count/features/slabs/services/backup_service.dart';
@@ -7,7 +10,6 @@ import 'package:slab_count/features/settings/presentation/screens/info_screen.da
 import 'package:slab_count/features/settings/presentation/screens/backup_status_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:open_filex/open_filex.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -467,6 +469,16 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     _buildSettingsGroup(
                       isDark: isDark,
                       children: [
+                        if (kIsWeb && !isPwaStandalone()) ...[
+                          _buildSettingsRow(
+                            icon: Icons.install_mobile_rounded,
+                            iconColor: Colors.blueAccent,
+                            title: 'Install Jamna Stone App',
+                            onTap: () => PwaInstallHelper.showInstallGuide(context),
+                            trailing: const Icon(CupertinoIcons.chevron_right, size: 16, color: Colors.grey),
+                          ),
+                          _buildDivider(isDark),
+                        ],
                         _buildSettingsRow(
                           icon: Icons.info_outline_rounded,
                           iconColor: Colors.blueGrey,

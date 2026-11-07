@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../../core/utils/pdf_share_helper.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:share_plus/share_plus.dart';
@@ -588,6 +589,11 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
             tooltip: 'Redo',
             onPressed: _redoStack.isNotEmpty ? _redo : null,
           ),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: Colors.blueAccent),
+            tooltip: 'Share PDF',
+            onPressed: _sharePdfDirectly,
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) async {
@@ -1056,7 +1062,7 @@ class _SlabMeasurementScreenState extends State<SlabMeasurementScreen> {
     final pdf = _buildPdfDocument(safeName);
     final bytes = await pdf.save();
 
-    await Printing.sharePdf(bytes: bytes, filename: '$safeName.pdf');
+    await PdfShareHelper.sharePdf(bytes: bytes, filename: '$safeName.pdf');
   }
 
   // --- Previous export bottom-sheet & file name prompt retained in comments as requested ---

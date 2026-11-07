@@ -1,11 +1,11 @@
 {
-    "name": "slab_count",
-    "short_name": "slab_count",
+    "name": "Jamna Stone",
+    "short_name": "Jamna Stone",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Jamna Stone - Slab Counter and Stock Calculator",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

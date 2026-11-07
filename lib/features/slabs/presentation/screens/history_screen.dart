@@ -16,6 +16,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
+import '../../../../core/utils/pdf_share_helper.dart';
 
 class HistoryScreen extends StatefulWidget {
   final Function(SlabBook) onBookOpened;
@@ -939,7 +940,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
     final safeName = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     
-    await Printing.sharePdf(bytes: bytes, filename: '$safeName.pdf');
+    await PdfShareHelper.sharePdf(bytes: bytes, filename: '$safeName.pdf');
   }
 
   @override
@@ -1039,6 +1040,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   ),
                                 ],
                               ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.share_rounded, color: Colors.blueAccent, size: 20),
+                              tooltip: 'Share PDF',
+                              onPressed: () => _shareBook(book),
                             ),
                             PopupMenuButton<String>(
                               icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),

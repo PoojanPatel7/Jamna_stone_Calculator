@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../../slabs/services/backup_service.dart';
+import '../../../slabs/services/storage_service.dart';
+import '../../../stock/services/stock_storage_service.dart';
 
 enum BackupCheckState { checking, secure, error }
 
@@ -30,10 +33,30 @@ class _BackupStatusScreenState extends State<BackupStatusScreen> {
       _state = BackupCheckState.checking;
       _statusMessage = 'Verifying local storage access...';
     });
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 600));
     
     if (!mounted) return;
     setState(() => _statusMessage = 'Checking database integrity...');
+
+    if (kIsWeb) {
+      final history = await StorageService.loadHistory();
+      final stockEntries = await StockStorageService.loadStockEntries();
+      final blockNames = await StockStorageService.loadBlockNames();
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Web storage verified! (${history.length} books, ${stockEntries.length} stock items)';
+        _backupData = {
+          'history': history.map((e) => e.toJson()).toList(),
+          'stockEntries': stockEntries.map((e) => e.toJson()).toList(),
+          'blockNames': blockNames,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        _state = BackupCheckState.secure;
+      });
+      return;
+    }
+
     final data = await BackupService.getBackupData();
     await Future.delayed(const Duration(milliseconds: 600));
 
@@ -57,7 +80,16 @@ class _BackupStatusScreenState extends State<BackupStatusScreen> {
     try {
       final success = await BackupService.exportDatabaseFile();
       if (mounted) {
-        if (!success) {
+        if (success) {
+          if (kIsWeb) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Backup file downloaded! Saved to your device Downloads/Files.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Failed to export backup file.'), backgroundColor: Colors.red),
           );
